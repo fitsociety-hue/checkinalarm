@@ -318,22 +318,35 @@ function processUncheckedAsNoMeal() {
 // ==========================================
 
 // 5. 관리자 대시보드 데이터 가져오기
-function handleGetAdminDashboard() {
+function handleGetAdminDashboard(params = {}) {
+  const { targetDateStr } = params; // 예: "5월 18일 (월)"
   const todayDate = new Date();
-  const todayStr = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
+  
+  // 클라이언트에서 지정한 날짜 문자열이 있으면 그걸 사용하고, 없으면 오늘 날짜 문자열 사용
+  const targetStr = targetDateStr || Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
+  // targetYMD는 자원봉사자 데이터(yyyy-MM-dd) 조회를 위해 필요함 (정확성을 위해 클라이언트가 yyyy-MM-dd 도 주면 좋으나 생략 가능)
+  // 여기서는 단순히 자원봉사자는 targetStr로도 매칭되도록 기존 코드 유지하거나 개선 가능
   const todayYMD = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
   // 식사 데이터 집계
   const mealsData = getSheet('Meals').getDataRange().getValues();
   let mealCount = 0;
   let noMealCount = 0;
+  let undecidedCount = 0;
   const checkedUsers = [];
 
   for (let i = 1; i < mealsData.length; i++) {
-    if (mealsData[i][0] === todayStr) {
-      if (mealsData[i][3] === 'meal') mealCount++;
-      else if (mealsData[i][3] === 'no-meal') noMealCount++;
-      checkedUsers.push(mealsData[i][1] + "_" + mealsData[i][2]);
+    if (mealsData[i][0] === targetStr) {
+      if (mealsData[i][3] === 'meal') {
+        mealCount++;
+        checkedUsers[mealsData[i][1] + "_" + mealsData[i][2]] = 'meal';
+      } else if (mealsData[i][3] === 'no-meal') {
+        noMealCount++;
+        checkedUsers[mealsData[i][1] + "_" + mealsData[i][2]] = 'no-meal';
+      } else if (mealsData[i][3] === 'none' || mealsData[i][3] === '미정') {
+        undecidedCount++;
+        checkedUsers[mealsData[i][1] + "_" + mealsData[i][2]] = '미정';
+      }
     }
   }
 
@@ -341,12 +354,12 @@ function handleGetAdminDashboard() {
   const volData = getSheet('Volunteers').getDataRange().getValues();
   let volCount = 0;
   for (let i = 1; i < volData.length; i++) {
-    if (volData[i][0] === todayYMD || volData[i][0] === todayStr) {
+    if (volData[i][0] === todayYMD || volData[i][0] === targetStr) {
       volCount += Number(volData[i][3]);
     }
   }
 
-  // 전체 유저 중 미체크 인원 찾기
+  // 전체 유저 중 미체크 및 미정 인원 찾기
   const usersData = getSheet('Users').getDataRange().getValues();
   const uncheckedUsers = [];
   let totalEmployees = 0;
@@ -354,22 +367,26 @@ function handleGetAdminDashboard() {
   for (let i = 1; i < usersData.length; i++) {
     const uName = usersData[i][0];
     const uTeam = usersData[i][1];
-    if (!uName) continue;
+    if (!uName || uName === 'admin') continue;
     
     totalEmployees++;
-    if (!checkedUsers.includes(uName + "_" + uTeam)) {
+    const status = checkedUsers[uName + "_" + uTeam];
+    if (!status) {
       uncheckedUsers.push({ name: uName, team: uTeam, status: '미체크' });
+    } else if (status === '미정') {
+      uncheckedUsers.push({ name: uName, team: uTeam, status: '미정' });
     }
   }
 
   // 식사 또는 미식사로 체크된 사람들도 상태를 볼 수 있도록 합치기 원한다면 로직 추가 가능
-  // 현재는 미체크 인원만 반환
+  // 현재는 미체크/미정 인원만 반환
 
   return {
     success: true,
     data: {
       mealCount,
       noMealCount,
+      undecidedCount,
       volCount,
       totalEmployees,
       uncheckedUsers

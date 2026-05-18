@@ -42,7 +42,7 @@ export default function Dashboard() {
         dates.push({
           date: new Date(curr),
           dateStr: curr.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' }),
-          status: 'meal', // 'meal', 'no-meal', 'vacation', etc.
+          status: 'none', // 'none', 'meal', 'no-meal'
           disabled: dates.length === 0 && isPastDeadline() // Disable today if past 11 AM
         });
       }
@@ -51,19 +51,21 @@ export default function Dashboard() {
     setMealDates(dates);
   }, []);
 
+  const [adminTargetDate, setAdminTargetDate] = useState('');
+
   useEffect(() => {
     if (activeTab === 'admin' && user?.role === 'admin') {
-      fetchAdminData();
+      fetchAdminData(adminTargetDate);
     }
     if (activeTab === 'personal') {
       fetchPersonalAlarm();
     }
-  }, [activeTab]);
+  }, [activeTab, adminTargetDate]);
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = async (targetDateStr = '') => {
     setAdminLoading(true);
     try {
-      const result = await fetchGAS('getAdminDashboard');
+      const result = await fetchGAS('getAdminDashboard', { targetDateStr });
       if (result.success) {
         setAdminData(result.data);
       }
@@ -117,7 +119,7 @@ export default function Dashboard() {
     try {
       await fetchGAS('updateMealStatus', { name: empName, team: empTeam, status });
       // Refresh admin data
-      await fetchAdminData();
+      await fetchAdminData(adminTargetDate);
       alert('상태가 변경되었습니다.');
     } catch (err) {
       alert('변경 중 오류가 발생했습니다.');
@@ -297,6 +299,14 @@ export default function Dashboard() {
                   </div>
                   
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      className={`btn ${item.status === 'none' ? 'btn-primary' : 'btn-outline'}`}
+                      style={{ padding: '8px 16px', borderRadius: '20px', backgroundColor: item.status === 'none' ? '#9CA3AF' : '', borderColor: item.status === 'none' ? '#9CA3AF' : '' }}
+                      onClick={() => handleMealStatusChange(index, 'none')}
+                      disabled={item.disabled && user.role !== 'admin'}
+                    >
+                      미정
+                    </button>
                     <button 
                       className={`btn ${item.status === 'meal' ? 'btn-primary' : 'btn-outline'}`}
                       style={{ padding: '8px 16px', borderRadius: '20px' }}
@@ -509,7 +519,29 @@ export default function Dashboard() {
               <p>데이터를 불러오는 중입니다...</p>
             ) : adminData ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <label htmlFor="adminDateSelect" style={{ fontWeight: '600' }}>조회 일자:</label>
+                  <select 
+                    id="adminDateSelect"
+                    className="input-field"
+                    style={{ width: '200px', margin: 0, padding: '8px' }}
+                    value={adminTargetDate}
+                    onChange={(e) => setAdminTargetDate(e.target.value)}
+                  >
+                    <option value="">오늘 ({new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })})</option>
+                    {[1, 2, 3, 4, 5].map(offset => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + offset);
+                      if (d.getDay() === 0 || d.getDay() === 6) {
+                        d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1));
+                      }
+                      const dateStr = d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
+                      return <option key={offset} value={dateStr}>{dateStr}</option>;
+                    })}
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', marginBottom: '32px' }}>
                   <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                     <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>식사 인원 (직원)</div>
                     <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--primary-color)' }}>{adminData.mealCount}명</div>
@@ -519,18 +551,22 @@ export default function Dashboard() {
                     <div style={{ fontSize: '32px', fontWeight: '700', color: '#EF4444' }}>{adminData.noMealCount}명</div>
                   </div>
                   <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>미정 인원</div>
+                    <div style={{ fontSize: '32px', fontWeight: '700', color: '#6B7280' }}>{adminData.undecidedCount || 0}명</div>
+                  </div>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                     <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>자원봉사자 식수</div>
                     <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--success)' }}>{adminData.volCount}명</div>
                   </div>
                   <div style={{ backgroundColor: 'var(--primary-color)', padding: '24px', borderRadius: '16px', textAlign: 'center', color: 'white', boxShadow: '0 10px 20px rgba(74, 96, 225, 0.2)' }}>
-                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>오늘 총 예상 식수</div>
+                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>총 예상 식수</div>
                     <div style={{ fontSize: '32px', fontWeight: '700' }}>{adminData.mealCount + adminData.volCount}명</div>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ fontSize: '18px', margin: 0 }}>미체크 직원 목록 ({adminData.uncheckedUsers.length}명)</h3>
-                  <button className="btn btn-outline" onClick={fetchAdminData} disabled={adminLoading} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                  <h3 style={{ fontSize: '18px', margin: 0 }}>미체크 및 미정 직원 목록 ({adminData.uncheckedUsers.length}명)</h3>
+                  <button className="btn btn-outline" onClick={() => fetchAdminData(adminTargetDate)} disabled={adminLoading} style={{ padding: '6px 12px', fontSize: '12px' }}>
                     {adminLoading ? '새로고침 중...' : '새로고침'}
                   </button>
                 </div>
@@ -557,9 +593,19 @@ export default function Dashboard() {
                           <tr key={i} style={{ borderBottom: '1px solid #F3F4F6' }}>
                             <td style={{ padding: '12px 16px' }}>{u.team}</td>
                             <td style={{ padding: '12px 16px' }}>{u.name}</td>
-                            <td style={{ padding: '12px 16px', color: 'var(--danger)' }}>미체크</td>
+                            <td style={{ padding: '12px 16px', color: u.status === '미체크' ? 'var(--danger)' : '#6B7280' }}>
+                              {u.status}
+                            </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                               <div style={{ display: 'inline-flex', gap: '8px' }}>
+                                <button 
+                                  className="btn btn-outline" 
+                                  style={{ padding: '6px 12px', fontSize: '12px', borderColor: '#9CA3AF', color: '#6B7280' }}
+                                  onClick={() => handleAdminUpdateMeal(u.name, u.team, 'none')}
+                                  disabled={adminLoading}
+                                >
+                                  미정
+                                </button>
                                 <button 
                                   className="btn btn-primary" 
                                   style={{ padding: '6px 12px', fontSize: '12px' }}
