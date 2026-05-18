@@ -1,5 +1,5 @@
 // Google Apps Script Web App URL
-export const GAS_URL = 'https://script.google.com/macros/s/AKfycbxtZDW8ktasVfffbp1Gqt5cS5penVpBPWMo3ImgkzN_Jxs5_cxj9SdCmphd0kcZNdZZ/exec';
+export const GAS_URL = 'https://script.google.com/macros/s/AKfycbxuYvrEdbXZRfhAmIQFeqpHx6C4uOpx6yMfuLzQLyM8_c377NzhsGPjbD6zUaDJdHpN/exec';
 
 export const fetchGAS = (action, payload = {}) => {
   return new Promise((resolve, reject) => {
