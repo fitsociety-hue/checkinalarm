@@ -146,8 +146,12 @@ function handleLogin(params) {
     const [sName, sTeam, sPin, sRole] = data[i];
     if (sName === name && sTeam === team) {
       if (sPin.toString() === pin.toString()) {
-        if (loginType === 'admin' && sRole !== 'admin') {
-          return { success: false, message: '해당 계정은 관리자 권한이 없습니다. 일반 직원으로 로그인해주세요.' };
+        if (loginType === 'admin') {
+          if (sRole !== 'admin') {
+            // 올바른 인증 코드로 로그인 시, 기존 일반 직원을 관리자로 승급시킵니다.
+            sheet.getRange(i + 1, 4).setValue('admin');
+            return { success: true, role: 'admin', message: '관리자 권한으로 승급되었습니다.' };
+          }
         }
         return { success: true, role: sRole };
       } else {
