@@ -60,6 +60,8 @@ function doGet(e) {
       result = handleSaveVolunteer(params);
     } else if (action === 'getAdminDashboard') {
       result = handleGetAdminDashboard(params);
+    } else if (action === 'getMeals') {
+      result = handleGetMeals(params);
     } else if (action === 'updateMealStatus') {
       result = handleUpdateMealStatus(params);
     } else if (action === 'savePersonalAlarm') {
@@ -116,6 +118,8 @@ function doPost(e) {
       result = handleSaveVolunteer(data);
     } else if (action === 'getAdminDashboard') {
       result = handleGetAdminDashboard(data);
+    } else if (action === 'getMeals') {
+      result = handleGetMeals(data);
     } else if (action === 'updateMealStatus') {
       result = handleUpdateMealStatus(data);
     } else if (action === 'savePersonalAlarm') {
@@ -217,6 +221,25 @@ function handleSaveMeals(params) {
   });
 
   return { success: true };
+}
+
+// 4-1. 직원 식사 일정 조회
+function handleGetMeals(params) {
+  const { name, team } = params;
+  const sheet = getSheet('Meals');
+  const data = sheet.getDataRange().getValues();
+  
+  const userMeals = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === name && data[i][2] === team) {
+      userMeals.push({
+        dateStr: data[i][0],
+        status: data[i][3]
+      });
+    }
+  }
+  
+  return { success: true, data: userMeals };
 }
 
 // ==========================================

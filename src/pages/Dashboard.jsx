@@ -49,7 +49,24 @@ export default function Dashboard() {
       curr.setDate(curr.getDate() + 1);
     }
     setMealDates(dates);
-  }, []);
+
+    // Fetch saved meals for the user
+    if (user?.role !== 'admin' && user?.name && user?.team) {
+      fetchGAS('getMeals', { name: user.name, team: user.team })
+        .then(result => {
+          if (result.success && result.data) {
+            const savedMealsMap = {};
+            result.data.forEach(m => { savedMealsMap[m.dateStr] = m.status; });
+            
+            setMealDates(prevDates => prevDates.map(d => ({
+              ...d,
+              status: savedMealsMap[d.dateStr] || d.status
+            })));
+          }
+        })
+        .catch(err => console.error('Failed to fetch meals', err));
+    }
+  }, [user]);
 
   const [adminTargetDate, setAdminTargetDate] = useState('');
 
