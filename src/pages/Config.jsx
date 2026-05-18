@@ -113,7 +113,7 @@ export default function Config() {
                     alert('웹훅 URL을 먼저 입력해주세요.');
                     return;
                   }
-                  setSaving(true);
+                  setLoading(true);
                   try {
                     const res = await fetchGAS('testWebhook', { 
                       webhookUrl: formData.webhookUrl,
@@ -123,10 +123,10 @@ export default function Config() {
                   } catch (err) {
                     alert('테스트 알림 전송에 실패했습니다.');
                   } finally {
-                    setSaving(false);
+                    setLoading(false);
                   }
                 }}
-                disabled={saving || !formData.webhookUrl}
+                disabled={loading || !formData.webhookUrl}
                 style={{ whiteSpace: 'nowrap' }}
               >
                 연결 테스트
