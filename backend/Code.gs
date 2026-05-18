@@ -32,6 +32,8 @@ function getSheet(sheetName) {
       sheet.appendRow(['날짜', '기록자', '봉사자명', '식수', '타임스탬프']);
     } else if (sheetName === 'Meals') {
       sheet.appendRow(['날짜', '이름', '소속', '상태', '타임스탬프']);
+    } else if (sheetName === 'PersonalAlarms') {
+      sheet.appendRow(['이름', '소속', '개인웹훅URL', '알람시간', '알람요일']);
     }
   }
   return sheet;
@@ -53,6 +55,14 @@ function doGet(e) {
       result = handleSaveMeals(params);
     } else if (action === 'saveVolunteer') {
       result = handleSaveVolunteer(params);
+    } else if (action === 'getAdminDashboard') {
+      result = handleGetAdminDashboard(params);
+    } else if (action === 'updateMealStatus') {
+      result = handleUpdateMealStatus(params);
+    } else if (action === 'savePersonalAlarm') {
+      result = handleSavePersonalAlarm(params);
+    } else if (action === 'getPersonalAlarm') {
+      result = handleGetPersonalAlarm(params);
     } else {
       result = { success: false, message: '알 수 없는 요청입니다.' };
     }
@@ -95,6 +105,14 @@ function doPost(e) {
       result = handleSaveMeals(data);
     } else if (action === 'saveVolunteer') {
       result = handleSaveVolunteer(data);
+    } else if (action === 'getAdminDashboard') {
+      result = handleGetAdminDashboard(data);
+    } else if (action === 'updateMealStatus') {
+      result = handleUpdateMealStatus(data);
+    } else if (action === 'savePersonalAlarm') {
+      result = handleSavePersonalAlarm(data);
+    } else if (action === 'getPersonalAlarm') {
+      result = handleGetPersonalAlarm(data);
     } else {
       result = { success: false, message: '알 수 없는 요청입니다.' };
     }
@@ -138,14 +156,14 @@ function handleLogin(params) {
 
 // 2. 알람 시스템 설정 저장 (Config)
 function handleSaveConfig(params) {
-  const { systemName, sheetUrl, webhookUrl, startDate, endDate, weekdayOnly } = params;
+  const { systemName, sheetUrl, webhookUrl, startDate, endDate, weekdayOnly, alarmTime } = params;
   const sheet = getSheet('Config');
   
   // 기존 설정 덮어쓰기 (항상 2번째 행에 저장)
   if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 1, 1, 6).setValues([[systemName, sheetUrl, webhookUrl, startDate, endDate, weekdayOnly]]);
+    sheet.getRange(2, 1, 1, 7).setValues([[systemName, sheetUrl, webhookUrl, startDate, endDate, weekdayOnly, alarmTime || '10:40']]);
   } else {
-    sheet.appendRow([systemName, sheetUrl, webhookUrl, startDate, endDate, weekdayOnly]);
+    sheet.appendRow([systemName, sheetUrl, webhookUrl, startDate, endDate, weekdayOnly, alarmTime || '10:40']);
   }
   return { success: true, message: '설정이 저장되었습니다.' };
 }
@@ -277,4 +295,139 @@ function processUncheckedAsNoMeal() {
       mealsSheet.appendRow([todayStr, name, team, 'no-meal', new Date()]);
     }
   }
+}
+
+// ==========================================
+// 신규 추가된 핸들러: 대시보드 및 개인 설정
+// ==========================================
+
+// 5. 관리자 대시보드 데이터 가져오기
+function handleGetAdminDashboard() {
+  const todayDate = new Date();
+  const todayStr = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
+  const todayYMD = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  // 식사 데이터 집계
+  const mealsData = getSheet('Meals').getDataRange().getValues();
+  let mealCount = 0;
+  let noMealCount = 0;
+  const checkedUsers = [];
+
+  for (let i = 1; i < mealsData.length; i++) {
+    if (mealsData[i][0] === todayStr) {
+      if (mealsData[i][3] === 'meal') mealCount++;
+      else if (mealsData[i][3] === 'no-meal') noMealCount++;
+      checkedUsers.push(mealsData[i][1] + "_" + mealsData[i][2]);
+    }
+  }
+
+  // 자원봉사자 집계
+  const volData = getSheet('Volunteers').getDataRange().getValues();
+  let volCount = 0;
+  for (let i = 1; i < volData.length; i++) {
+    if (volData[i][0] === todayYMD || volData[i][0] === todayStr) {
+      volCount += Number(volData[i][3]);
+    }
+  }
+
+  // 전체 유저 중 미체크 인원 찾기
+  const usersData = getSheet('Users').getDataRange().getValues();
+  const uncheckedUsers = [];
+  let totalEmployees = 0;
+  
+  for (let i = 1; i < usersData.length; i++) {
+    const uName = usersData[i][0];
+    const uTeam = usersData[i][1];
+    if (!uName) continue;
+    
+    totalEmployees++;
+    if (!checkedUsers.includes(uName + "_" + uTeam)) {
+      uncheckedUsers.push({ name: uName, team: uTeam, status: '미체크' });
+    }
+  }
+
+  // 식사 또는 미식사로 체크된 사람들도 상태를 볼 수 있도록 합치기 원한다면 로직 추가 가능
+  // 현재는 미체크 인원만 반환
+
+  return {
+    success: true,
+    data: {
+      mealCount,
+      noMealCount,
+      volCount,
+      totalEmployees,
+      uncheckedUsers
+    }
+  };
+}
+
+// 6. 관리자: 식사 여부 직접 변경
+function handleUpdateMealStatus(params) {
+  const { name, team, status } = params;
+  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, EEE');
+  
+  const sheet = getSheet('Meals');
+  const data = sheet.getDataRange().getValues();
+  
+  let updated = false;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === todayStr && data[i][1] === name && data[i][2] === team) {
+      sheet.getRange(i + 1, 4).setValue(status);
+      sheet.getRange(i + 1, 5).setValue(new Date());
+      updated = true;
+      break;
+    }
+  }
+  
+  if (!updated) {
+    sheet.appendRow([todayStr, name, team, status, new Date()]);
+  }
+  
+  return { success: true };
+}
+
+// 7. 개인 알람 설정 저장
+function handleSavePersonalAlarm(params) {
+  const { name, team, webhookUrl, alarmTime, alarmDays } = params; // alarmDays: '평일', '매일' 등
+  const sheet = getSheet('PersonalAlarms');
+  const data = sheet.getDataRange().getValues();
+  
+  let updated = false;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === name && data[i][1] === team) {
+      sheet.getRange(i + 1, 3).setValue(webhookUrl);
+      sheet.getRange(i + 1, 4).setValue(alarmTime);
+      sheet.getRange(i + 1, 5).setValue(alarmDays);
+      updated = true;
+      break;
+    }
+  }
+  
+  if (!updated) {
+    sheet.appendRow([name, team, webhookUrl, alarmTime, alarmDays]);
+  }
+  
+  return { success: true };
+}
+
+// 8. 개인 알람 설정 가져오기
+function handleGetPersonalAlarm(params) {
+  const { name, team } = params;
+  const sheet = getSheet('PersonalAlarms');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === name && data[i][1] === team) {
+      return {
+        success: true,
+        data: {
+          webhookUrl: data[i][2],
+          alarmTime: data[i][3],
+          alarmDays: data[i][4]
+        }
+      };
+    }
+  }
+  
+  return { success: true, data: null };
 }

@@ -10,6 +10,7 @@ export default function Config() {
     systemName: '강동어울림복지관 식수 관리',
     sheetUrl: 'https://docs.google.com/spreadsheets/d/...',
     webhookUrl: '',
+    alarmTime: '10:40',
     startDate: '',
     endDate: '',
     weekdayOnly: true
@@ -127,6 +128,23 @@ export default function Config() {
                 value={formData.endDate}
                 onChange={handleChange}
               />
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label className="label">
+              정규 알람 시간 <span className="text-primary">*</span>
+            </label>
+            <input 
+              type="time" 
+              name="alarmTime"
+              className="input-field"
+              value={formData.alarmTime || '10:40'}
+              onChange={handleChange}
+              required
+            />
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              미체크 인원에게 식수 조사 독려 알람이 발송될 시간입니다. (예: 10:40)
             </div>
           </div>
 

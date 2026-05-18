@@ -7,13 +7,22 @@ import { fetchGAS } from '../api';
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('meal'); // 'meal', 'volunteer', 'admin'
+  const [activeTab, setActiveTab] = useState('meal'); // 'meal', 'volunteer', 'admin', 'personal'
   const [mealDates, setMealDates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [volunteerName, setVolunteerName] = useState('');
   const [volunteerCount, setVolunteerCount] = useState(1);
-
-  // Check if current time is past 11:00 AM
+  
+  // Admin Data
+  const [adminData, setAdminData] = useState(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  
+  // Personal Settings
+  const [personalAlarm, setPersonalAlarm] = useState({
+    webhookUrl: '',
+    alarmTime: '09:00',
+    alarmDays: '평일'
+  });
   const isPastDeadline = () => {
     const now = new Date();
     return now.getHours() >= 11;
@@ -37,9 +46,78 @@ export default function Dashboard() {
     setMealDates(dates);
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'admin' && user?.role === 'admin') {
+      fetchAdminData();
+    }
+    if (activeTab === 'personal') {
+      fetchPersonalAlarm();
+    }
+  }, [activeTab]);
+
+  const fetchAdminData = async () => {
+    setAdminLoading(true);
+    try {
+      const result = await fetchGAS('getAdminDashboard');
+      if (result.success) {
+        setAdminData(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin data', err);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const fetchPersonalAlarm = async () => {
+    setLoading(true);
+    try {
+      const result = await fetchGAS('getPersonalAlarm', { name: user.name, team: user.team });
+      if (result.success && result.data) {
+        setPersonalAlarm(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch personal alarm', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handlePersonalAlarmSave = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await fetchGAS('savePersonalAlarm', {
+        name: user.name,
+        team: user.team,
+        ...personalAlarm
+      });
+      alert('개인 알람 설정이 저장되었습니다.');
+    } catch (err) {
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdminUpdateMeal = async (empName, empTeam, status) => {
+    if (!window.confirm(`${empName}님의 식사 여부를 '${status === 'meal' ? '식사' : '미식사'}'로 변경하시겠습니까?`)) return;
+    
+    setAdminLoading(true);
+    try {
+      await fetchGAS('updateMealStatus', { name: empName, team: empTeam, status });
+      // Refresh admin data
+      await fetchAdminData();
+      alert('상태가 변경되었습니다.');
+    } catch (err) {
+      alert('변경 중 오류가 발생했습니다.');
+      setAdminLoading(false);
+    }
   };
 
   const handleMealStatusChange = (index, status) => {
@@ -98,14 +176,16 @@ export default function Dashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button 
-            className="btn btn-outline"
-            onClick={() => navigate('/config')}
-            title="알림 설정"
-          >
-            <Settings size={18} />
-            <span className="hidden-mobile">알림 설정</span>
-          </button>
+          {user?.role === 'admin' && (
+            <button 
+              className="btn btn-outline"
+              onClick={() => navigate('/config')}
+              title="시스템 알림 설정"
+            >
+              <Settings size={18} />
+              <span className="hidden-mobile">관리자 설정</span>
+            </button>
+          )}
           <button 
             className="btn btn-outline"
             onClick={handleLogout}
@@ -128,6 +208,12 @@ export default function Dashboard() {
           onClick={() => setActiveTab('volunteer')}
         >
           자원봉사자 등록
+        </button>
+        <button 
+          className={`tab ${activeTab === 'personal' ? 'active' : ''}`}
+          onClick={() => setActiveTab('personal')}
+        >
+          개인 설정
         </button>
         {user?.role === 'admin' && (
           <button 
@@ -252,6 +338,64 @@ export default function Dashboard() {
           </div>
         )}
 
+        {activeTab === 'personal' && (
+          <div className="glass-card" style={{ padding: '32px', gridColumn: '1 / -1' }}>
+            <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Settings size={20} className="text-primary" />
+              개인 알람 설정
+            </h2>
+            <p className="text-muted" style={{ marginBottom: '24px' }}>매일 아침 식사 여부를 체크하도록 개인 구글 챗으로 알림을 받을 수 있습니다.</p>
+            
+            <form onSubmit={handlePersonalAlarmSave}>
+              <div className="form-group">
+                <label className="label">구글 챗 웹훅(Webhook) URL</label>
+                <input 
+                  type="url" 
+                  className="input-field" 
+                  placeholder="https://chat.googleapis.com/v1/spaces/..."
+                  value={personalAlarm.webhookUrl}
+                  onChange={(e) => setPersonalAlarm({...personalAlarm, webhookUrl: e.target.value})}
+                  required
+                />
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="label">알람 시간</label>
+                  <input 
+                    type="time" 
+                    className="input-field" 
+                    value={personalAlarm.alarmTime}
+                    onChange={(e) => setPersonalAlarm({...personalAlarm, alarmTime: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="label">알람 요일</label>
+                  <select 
+                    className="input-field"
+                    value={personalAlarm.alarmDays}
+                    onChange={(e) => setPersonalAlarm({...personalAlarm, alarmDays: e.target.value})}
+                  >
+                    <option value="평일">평일 (월~금)</option>
+                    <option value="매일">매일 (월~일)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
+                  {loading ? '저장 중...' : '저장하기'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {activeTab === 'admin' && user?.role === 'admin' && (
           <div className="glass-card" style={{ padding: '32px', gridColumn: '1 / -1' }}>
             <h2 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -259,52 +403,87 @@ export default function Dashboard() {
               오늘의 식수 현황 (관리자)
             </h2>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-              <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
-                <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>직원 식수</div>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--primary-color)' }}>42명</div>
-              </div>
-              <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
-                <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>자원봉사자 식수</div>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--success)' }}>8명</div>
-              </div>
-              <div style={{ backgroundColor: 'var(--primary-color)', padding: '24px', borderRadius: '16px', textAlign: 'center', color: 'white', boxShadow: '0 10px 20px rgba(74, 96, 225, 0.2)' }}>
-                <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>총 예상 식수</div>
-                <div style={{ fontSize: '32px', fontWeight: '700' }}>50명</div>
-              </div>
-            </div>
+            {adminLoading && !adminData ? (
+              <p>데이터를 불러오는 중입니다...</p>
+            ) : adminData ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>식사 인원 (직원)</div>
+                    <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--primary-color)' }}>{adminData.mealCount}명</div>
+                  </div>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>미식사 인원</div>
+                    <div style={{ fontSize: '32px', fontWeight: '700', color: '#EF4444' }}>{adminData.noMealCount}명</div>
+                  </div>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>자원봉사자 식수</div>
+                    <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--success)' }}>{adminData.volCount}명</div>
+                  </div>
+                  <div style={{ backgroundColor: 'var(--primary-color)', padding: '24px', borderRadius: '16px', textAlign: 'center', color: 'white', boxShadow: '0 10px 20px rgba(74, 96, 225, 0.2)' }}>
+                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>오늘 총 예상 식수</div>
+                    <div style={{ fontSize: '32px', fontWeight: '700' }}>{adminData.mealCount + adminData.volCount}명</div>
+                  </div>
+                </div>
 
-            <h3 style={{ marginBottom: '16px', fontSize: '18px' }}>미체크 직원 목록</h3>
-            <p className="text-muted" style={{ marginBottom: '16px' }}>11시 이후 누락된 직원의 식사 여부를 관리자가 직접 수정할 수 있습니다.</p>
-            
-            <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
-              <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-                <tr>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>소속</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>이름</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>상태</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)' }}>관리</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
-                  <td style={{ padding: '12px 16px' }}>사회복지팀</td>
-                  <td style={{ padding: '12px 16px' }}>김철수</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--danger)' }}>미체크 (미식사 처리됨)</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                    <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px' }}>식사로 변경</button>
-                  </td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '12px 16px' }}>총무팀</td>
-                  <td style={{ padding: '12px 16px' }}>이영희</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--danger)' }}>미체크 (미식사 처리됨)</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                    <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px' }}>식사로 변경</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '18px', margin: 0 }}>미체크 직원 목록 ({adminData.uncheckedUsers.length}명)</h3>
+                  <button className="btn btn-outline" onClick={fetchAdminData} disabled={adminLoading} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                    {adminLoading ? '새로고침 중...' : '새로고침'}
+                  </button>
+                </div>
+                
+                <p className="text-muted" style={{ marginBottom: '16px' }}>11시 이후 누락된 직원의 식사 여부를 관리자가 직접 수정할 수 있습니다.</p>
+                
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+                    <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                      <tr>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>소속</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>이름</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>상태</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)' }}>관리자 조치</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminData.uncheckedUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>미체크 인원이 없습니다.</td>
+                        </tr>
+                      ) : (
+                        adminData.uncheckedUsers.map((u, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                            <td style={{ padding: '12px 16px' }}>{u.team}</td>
+                            <td style={{ padding: '12px 16px' }}>{u.name}</td>
+                            <td style={{ padding: '12px 16px', color: 'var(--danger)' }}>미체크</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', gap: '8px' }}>
+                                <button 
+                                  className="btn btn-primary" 
+                                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                                  onClick={() => handleAdminUpdateMeal(u.name, u.team, 'meal')}
+                                  disabled={adminLoading}
+                                >
+                                  식사
+                                </button>
+                                <button 
+                                  className="btn btn-outline" 
+                                  style={{ padding: '6px 12px', fontSize: '12px', borderColor: '#EF4444', color: '#EF4444' }}
+                                  onClick={() => handleAdminUpdateMeal(u.name, u.team, 'no-meal')}
+                                  disabled={adminLoading}
+                                >
+                                  미식사
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
           </div>
         )}
       </div>
