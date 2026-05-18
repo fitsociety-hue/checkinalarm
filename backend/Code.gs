@@ -34,6 +34,9 @@ function getSheet(sheetName) {
       sheet.appendRow(['날짜', '이름', '소속', '상태', '타임스탬프']);
     } else if (sheetName === 'PersonalAlarms') {
       sheet.appendRow(['이름', '소속', '개인웹훅URL', '알람시간', '알람요일']);
+    } else if (sheetName === 'Admins') {
+      sheet.appendRow(['아이디', '비밀번호']);
+      sheet.appendRow(['admin', '1107']);
     }
   }
   return sheet;
@@ -63,6 +66,10 @@ function doGet(e) {
       result = handleSavePersonalAlarm(params);
     } else if (action === 'getPersonalAlarm') {
       result = handleGetPersonalAlarm(params);
+    } else if (action === 'adminLogin') {
+      result = handleAdminLogin(params);
+    } else if (action === 'changeAdminPassword') {
+      result = handleChangeAdminPassword(params);
     } else {
       result = { success: false, message: '알 수 없는 요청입니다.' };
     }
@@ -113,6 +120,10 @@ function doPost(e) {
       result = handleSavePersonalAlarm(data);
     } else if (action === 'getPersonalAlarm') {
       result = handleGetPersonalAlarm(data);
+    } else if (action === 'adminLogin') {
+      result = handleAdminLogin(data);
+    } else if (action === 'changeAdminPassword') {
+      result = handleChangeAdminPassword(data);
     } else {
       result = { success: false, message: '알 수 없는 요청입니다.' };
     }
@@ -130,30 +141,20 @@ function doPost(e) {
 // 핸들러 함수들
 // ==========================================
 
-// 1. 회원가입 및 로그인 처리
+// 1. 일반 직원 로그인 처리
 function handleLogin(params) {
-  const { name, team, pin, loginType, adminCode } = params;
+  const { name, team, pin } = params;
   const sheet = getSheet('Users');
   const data = sheet.getDataRange().getValues();
   
-  // 관리자 가입/로그인 시 보안 코드 확인 (예: 1234)
-  if (loginType === 'admin' && adminCode !== '1234') {
-    return { success: false, message: '관리자 인증 코드가 올바르지 않습니다.' };
-  }
-
   // 첫 행은 헤더이므로 제외하고 검색
   for (let i = 1; i < data.length; i++) {
     const [sName, sTeam, sPin, sRole] = data[i];
     if (sName === name && sTeam === team) {
       if (sPin.toString() === pin.toString()) {
-        if (loginType === 'admin') {
-          if (sRole !== 'admin') {
-            // 올바른 인증 코드로 로그인 시, 기존 일반 직원을 관리자로 승급시킵니다.
-            sheet.getRange(i + 1, 4).setValue('admin');
-            return { success: true, role: 'admin', message: '관리자 권한으로 승급되었습니다.' };
-          }
-        }
-        return { success: true, role: sRole };
+        // 기존 직원이 관리자 권한을 가졌더라도 일반 탭으로 로그인하면 employee로 취급하거나
+        // 관리자 전용 대시보드가 분리되었으므로, 직원 대시보드만 보게 됩니다.
+        return { success: true, role: 'employee' };
       } else {
         return { success: false, message: '비밀번호가 일치하지 않습니다.' };
       }
@@ -161,9 +162,8 @@ function handleLogin(params) {
   }
   
   // 등록된 정보가 없으면 신규 회원가입 처리
-  const role = loginType === 'admin' ? 'admin' : (name.includes('관리자') ? 'admin' : 'employee');
-  sheet.appendRow([name, team, pin, role]);
-  return { success: true, role: role, message: '회원가입이 완료되었습니다.' };
+  sheet.appendRow([name, team, pin, 'employee']);
+  return { success: true, role: 'employee', message: '직원 등록이 완료되었습니다.' };
 }
 
 // 2. 알람 시스템 설정 저장 (Config)
@@ -442,4 +442,41 @@ function handleGetPersonalAlarm(params) {
   }
   
   return { success: true, data: null };
+}
+
+// 9. 전용 관리자 로그인 처리
+function handleAdminLogin(params) {
+  const { adminId, adminPassword } = params;
+  const sheet = getSheet('Admins');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === adminId) {
+      if (data[i][1].toString() === adminPassword.toString()) {
+        return { success: true, role: 'admin' };
+      } else {
+        return { success: false, message: '관리자 비밀번호가 일치하지 않습니다.' };
+      }
+    }
+  }
+  return { success: false, message: '해당 아이디를 가진 관리자가 존재하지 않습니다.' };
+}
+
+// 10. 관리자 비밀번호 변경
+function handleChangeAdminPassword(params) {
+  const { adminId, currentPassword, newPassword } = params;
+  const sheet = getSheet('Admins');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === adminId) {
+      if (data[i][1].toString() === currentPassword.toString()) {
+        sheet.getRange(i + 1, 2).setValue(newPassword);
+        return { success: true, message: '비밀번호가 성공적으로 변경되었습니다.' };
+      } else {
+        return { success: false, message: '현재 비밀번호가 일치하지 않습니다.' };
+      }
+    }
+  }
+  return { success: false, message: '관리자 계정을 찾을 수 없습니다.' };
 }

@@ -9,7 +9,8 @@ export default function Login() {
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
   const [pin, setPin] = useState('');
-  const [adminCode, setAdminCode] = useState(''); // Optional: for extra security
+  const [adminId, setAdminId] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -17,8 +18,12 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !team || pin.length !== 4) {
+    if (loginType === 'employee' && (!name || !team || pin.length !== 4)) {
       setError('이름, 팀명, 4자리 비밀번호를 정확히 입력해주세요.');
+      return;
+    }
+    if (loginType === 'admin' && (!adminId || !adminPassword)) {
+      setError('관리자 아이디와 비밀번호를 입력해주세요.');
       return;
     }
 
@@ -26,10 +31,19 @@ export default function Login() {
     setError('');
 
     try {
-      const data = await fetchGAS('login', { name, team, pin, loginType, adminCode });
+      let data;
+      if (loginType === 'admin') {
+        data = await fetchGAS('adminLogin', { adminId, adminPassword });
+      } else {
+        data = await fetchGAS('login', { name, team, pin });
+      }
 
       if (data.success) {
-        login({ name, team, pin, role: data.role || 'employee' });
+        if (loginType === 'admin') {
+          login({ name: '관리자', team: '운영지원팀', role: 'admin', adminId });
+        } else {
+          login({ name, team, pin, role: data.role || 'employee' });
+        }
         navigate('/dashboard');
       } else {
         setError(data.message || '로그인/회원가입에 실패했습니다.');
@@ -37,9 +51,6 @@ export default function Login() {
     } catch (err) {
       console.error(err);
       setError('서버와 통신할 수 없습니다.');
-      // 임시로 관리자/일반 로그인 허용 (테스트용)
-      // login({ name, team, pin, role: name.includes('관리자') ? 'admin' : 'employee' });
-      // navigate('/dashboard');
     } finally {
       setLoading(false);
     }
@@ -79,60 +90,77 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="label" htmlFor="name">이름</label>
-            <input
-              id="name"
-              type="text"
-              className="input-field"
-              placeholder="홍길동"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
+          {loginType === 'employee' ? (
+            <>
+              <div className="form-group">
+                <label className="label" htmlFor="name">이름</label>
+                <input
+                  id="name"
+                  type="text"
+                  className="input-field"
+                  placeholder="홍길동"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
 
-          <div className="form-group">
-            <label className="label" htmlFor="team">소속 팀명</label>
-            <input
-              id="team"
-              type="text"
-              className="input-field"
-              placeholder="전략기획팀"
-              value={team}
-              onChange={(e) => setTeam(e.target.value)}
-              required
-            />
-          </div>
+              <div className="form-group">
+                <label className="label" htmlFor="team">소속 팀명</label>
+                <input
+                  id="team"
+                  type="text"
+                  className="input-field"
+                  placeholder="전략기획팀"
+                  value={team}
+                  onChange={(e) => setTeam(e.target.value)}
+                  required
+                />
+              </div>
 
-          <div className="form-group" style={{ marginBottom: loginType === 'admin' ? '16px' : '32px' }}>
-            <label className="label" htmlFor="pin">비밀번호 (숫자 4자리)</label>
-            <input
-              id="pin"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              className="input-field"
-              placeholder="0000"
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-              required
-            />
-          </div>
+              <div className="form-group" style={{ marginBottom: '32px' }}>
+                <label className="label" htmlFor="pin">비밀번호 (숫자 4자리)</label>
+                <input
+                  id="pin"
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  className="input-field"
+                  placeholder="0000"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  required
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <label className="label" htmlFor="adminId">관리자 아이디</label>
+                <input
+                  id="adminId"
+                  type="text"
+                  className="input-field"
+                  placeholder="admin"
+                  value={adminId}
+                  onChange={(e) => setAdminId(e.target.value)}
+                  required
+                />
+              </div>
 
-          {loginType === 'admin' && (
-            <div className="form-group" style={{ marginBottom: '32px' }}>
-              <label className="label" htmlFor="adminCode">관리자 인증 코드</label>
-              <input
-                id="adminCode"
-                type="password"
-                className="input-field"
-                placeholder="초기 가입시 1234 입력"
-                value={adminCode}
-                onChange={(e) => setAdminCode(e.target.value)}
-                required={loginType === 'admin'}
-              />
-            </div>
+              <div className="form-group" style={{ marginBottom: '32px' }}>
+                <label className="label" htmlFor="adminPassword">관리자 비밀번호</label>
+                <input
+                  id="adminPassword"
+                  type="password"
+                  className="input-field"
+                  placeholder="비밀번호 입력"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  required
+                />
+              </div>
+            </>
           )}
 
           <button 

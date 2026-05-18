@@ -4,10 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Settings, Calendar, Users, Utensils, AlertCircle } from 'lucide-react';
 import { fetchGAS } from '../api';
 
-export default function Dashboard() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('meal'); // 'meal', 'volunteer', 'admin', 'personal'
+  const [activeTab, setActiveTab] = useState(user?.role === 'admin' ? 'admin' : 'meal');
   const [mealDates, setMealDates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [volunteerName, setVolunteerName] = useState('');
@@ -16,6 +13,11 @@ export default function Dashboard() {
   // Admin Data
   const [adminData, setAdminData] = useState(null);
   const [adminLoading, setAdminLoading] = useState(false);
+  
+  // Admin Password Change
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   
   // Personal Settings
   const [personalAlarm, setPersonalAlarm] = useState({
@@ -120,6 +122,32 @@ export default function Dashboard() {
     }
   };
 
+  const handleAdminPasswordChange = async (e) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword) return;
+    
+    setLoading(true);
+    try {
+      const result = await fetchGAS('changeAdminPassword', {
+        adminId: user.adminId || 'admin',
+        currentPassword,
+        newPassword
+      });
+      if (result.success) {
+        alert('비밀번호가 성공적으로 변경되었습니다.');
+        setShowPasswordChange(false);
+        setCurrentPassword('');
+        setNewPassword('');
+      } else {
+        alert(result.message || '비밀번호 변경에 실패했습니다.');
+      }
+    } catch (err) {
+      alert('서버와 통신할 수 없습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleMealStatusChange = (index, status) => {
     if (mealDates[index].disabled && user.role !== 'admin') {
       alert('오전 11시 이후에는 오늘 식사 여부를 변경할 수 없습니다. 관리자에게 문의하세요.');
@@ -183,7 +211,7 @@ export default function Dashboard() {
               title="시스템 알림 설정"
             >
               <Settings size={18} />
-              <span className="hidden-mobile">관리자 설정</span>
+              <span className="hidden-mobile">시스템 설정</span>
             </button>
           )}
           <button 
@@ -197,25 +225,28 @@ export default function Dashboard() {
       </div>
 
       <div className="tabs">
-        <button 
-          className={`tab ${activeTab === 'meal' ? 'active' : ''}`}
-          onClick={() => setActiveTab('meal')}
-        >
-          나의 식사 일정
-        </button>
-        <button 
-          className={`tab ${activeTab === 'volunteer' ? 'active' : ''}`}
-          onClick={() => setActiveTab('volunteer')}
-        >
-          자원봉사자 등록
-        </button>
-        <button 
-          className={`tab ${activeTab === 'personal' ? 'active' : ''}`}
-          onClick={() => setActiveTab('personal')}
-        >
-          개인 설정
-        </button>
-        {user?.role === 'admin' && (
+        {user?.role !== 'admin' ? (
+          <>
+            <button 
+              className={`tab ${activeTab === 'meal' ? 'active' : ''}`}
+              onClick={() => setActiveTab('meal')}
+            >
+              나의 식사 일정
+            </button>
+            <button 
+              className={`tab ${activeTab === 'volunteer' ? 'active' : ''}`}
+              onClick={() => setActiveTab('volunteer')}
+            >
+              자원봉사자 등록
+            </button>
+            <button 
+              className={`tab ${activeTab === 'personal' ? 'active' : ''}`}
+              onClick={() => setActiveTab('personal')}
+            >
+              개인 설정
+            </button>
+          </>
+        ) : (
           <button 
             className={`tab ${activeTab === 'admin' ? 'active' : ''}`}
             onClick={() => setActiveTab('admin')}
@@ -398,10 +429,50 @@ export default function Dashboard() {
 
         {activeTab === 'admin' && user?.role === 'admin' && (
           <div className="glass-card" style={{ padding: '32px', gridColumn: '1 / -1' }}>
-            <h2 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Utensils size={20} className="text-primary" />
-              오늘의 식수 현황 (관리자)
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <Utensils size={20} className="text-primary" />
+                오늘의 식수 현황 (관리자)
+              </h2>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => setShowPasswordChange(!showPasswordChange)}
+                style={{ padding: '6px 12px', fontSize: '14px' }}
+              >
+                비밀번호 변경
+              </button>
+            </div>
+            
+            {showPasswordChange && (
+              <div style={{ backgroundColor: '#F9FAFB', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid #E5E7EB' }}>
+                <h3 style={{ fontSize: '16px', marginBottom: '16px' }}>관리자 비밀번호 변경</h3>
+                <form onSubmit={handleAdminPasswordChange} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
+                  <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                    <label className="label">현재 비밀번호</label>
+                    <input 
+                      type="password" 
+                      className="input-field" 
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                    <label className="label">새 비밀번호</label>
+                    <input 
+                      type="password" 
+                      className="input-field" 
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? '변경 중...' : '변경 저장'}
+                  </button>
+                </form>
+              </div>
+            )}
             
             {adminLoading && !adminData ? (
               <p>데이터를 불러오는 중입니다...</p>
