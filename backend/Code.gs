@@ -18,9 +18,21 @@ function getSheet(sheetName) {
     throw new Error("스프레드시트를 찾을 수 없습니다. 코드 최상단의 SPREADSHEET_ID 값을 직접 입력해주세요.");
   }
   
-  const sheet = ss.getSheetByName(sheetName);
+  let sheet = ss.getSheetByName(sheetName);
+  
+  // 시트가 없으면 자동으로 생성하고 기본 헤더를 세팅합니다. (심플하고 최적화된 자동화 방식)
   if (!sheet) {
-    throw new Error(`'${sheetName}' 시트를 찾을 수 없습니다. 시트 이름이 정확한지 확인해주세요.`);
+    sheet = ss.insertSheet(sheetName);
+    
+    if (sheetName === 'Users') {
+      sheet.appendRow(['이름', '소속', '비밀번호', '권한']);
+    } else if (sheetName === 'Config') {
+      sheet.appendRow(['시스템명', '시트URL', '웹훅URL', '시작일', '종료일', '평일만']);
+    } else if (sheetName === 'Volunteers') {
+      sheet.appendRow(['날짜', '기록자', '봉사자명', '식수', '타임스탬프']);
+    } else if (sheetName === 'Meals') {
+      sheet.appendRow(['날짜', '이름', '소속', '상태', '타임스탬프']);
+    }
   }
   return sheet;
 }
