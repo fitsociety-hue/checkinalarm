@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Settings, Calendar, Users, Utensils, AlertCircle } from 'lucide-react';
+import { fetchGAS } from '../api';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -52,27 +53,37 @@ export default function Dashboard() {
     setMealDates(newDates);
   };
 
-  const handleSaveMeals = () => {
+  const handleSaveMeals = async () => {
     setLoading(true);
-    // TODO: Send data to GAS
-    setTimeout(() => {
+    try {
+      const datesToSave = mealDates.map(d => ({
+        dateStr: d.dateStr,
+        status: d.status
+      }));
+      await fetchGAS('saveMeals', { name: user.name, team: user.team, dates: datesToSave });
+      alert('식사 일정이 성공적으로 저장되었습니다.');
+    } catch (err) {
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
       setLoading(false);
-      alert('식사 일정이 저장되었습니다.');
-    }, 1000);
+    }
   };
 
-  const handleAddVolunteer = (e) => {
+  const handleAddVolunteer = async (e) => {
     e.preventDefault();
     if (!volunteerName || volunteerCount < 1) return;
     
     setLoading(true);
-    // TODO: Send volunteer data to GAS
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await fetchGAS('saveVolunteer', { name: user.name, volunteerName, count: volunteerCount });
       alert(`${volunteerName} 등 ${volunteerCount}명의 자원봉사자 식수가 등록되었습니다.`);
       setVolunteerName('');
       setVolunteerCount(1);
-    }, 1000);
+    } catch (err) {
+      alert('등록 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

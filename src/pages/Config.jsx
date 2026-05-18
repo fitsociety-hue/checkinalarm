@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
+import { fetchGAS } from '../api';
 
 export default function Config() {
   const navigate = useNavigate();
@@ -22,15 +23,18 @@ export default function Config() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    // TODO: Save config to GAS
-    setTimeout(() => {
-      setLoading(false);
-      alert('알람 설정이 저장되었습니다.');
+    try {
+      await fetchGAS('saveConfig', formData);
+      alert('알람 설정이 성공적으로 저장되었습니다.');
       navigate('/dashboard');
-    }, 1000);
+    } catch (err) {
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

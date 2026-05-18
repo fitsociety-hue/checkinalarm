@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
-
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzqu4zzWPR6yJ_qI1M64R1tgdP7G5pI06upLFlgQmq5jWE2MU8d7Ks9lC_3M_wdLiEt/exec';
+import { fetchGAS } from '../api';
 
 export default function Login() {
   const [name, setName] = useState('');
@@ -25,28 +24,20 @@ export default function Login() {
     setError('');
 
     try {
-      // JSONP or generic GET request to bypass CORS if POST fails, but POST is preferred if GAS is configured to handle it via doPost
-      // Alternatively, assuming GAS handles GET for simple login/register
-      const url = new URL(GAS_URL);
-      url.searchParams.append('action', 'login');
-      url.searchParams.append('name', name);
-      url.searchParams.append('team', team);
-      url.searchParams.append('pin', pin);
-
-      const response = await fetch(url, { method: 'GET' });
-      const data = await response.json();
+      const data = await fetchGAS('login', { name, team, pin });
 
       if (data.success) {
-        login({ name, team, pin, role: data.role || 'employee' }); // isAdmin could be handled here
+        login({ name, team, pin, role: data.role || 'employee' });
         navigate('/dashboard');
       } else {
         setError(data.message || '로그인/회원가입에 실패했습니다.');
       }
     } catch (err) {
       console.error(err);
-      // For demo purposes or if GAS is not fully setup yet, allow login anyway
-      login({ name, team, pin, role: name.includes('관리자') ? 'admin' : 'employee' });
-      navigate('/dashboard');
+      setError('서버와 통신할 수 없습니다.');
+      // 임시로 관리자/일반 로그인 허용 (테스트용)
+      // login({ name, team, pin, role: name.includes('관리자') ? 'admin' : 'employee' });
+      // navigate('/dashboard');
     } finally {
       setLoading(false);
     }
