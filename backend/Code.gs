@@ -357,10 +357,7 @@ function handleGetAdminDashboard(params = {}) {
   const todayDate = new Date();
   
   // 클라이언트에서 지정한 날짜 문자열이 있으면 그걸 사용하고, 없으면 오늘 날짜 문자열 사용
-  const targetStr = targetDateStr || Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
-  // targetYMD는 자원봉사자 데이터(yyyy-MM-dd) 조회를 위해 필요함 (정확성을 위해 클라이언트가 yyyy-MM-dd 도 주면 좋으나 생략 가능)
-  // 여기서는 단순히 자원봉사자는 targetStr로도 매칭되도록 기존 코드 유지하거나 개선 가능
-  const todayYMD = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const targetStr = targetDateStr || formatToKoreanDate(todayDate);
 
   // 식사 데이터 집계
   const mealsData = getSheet('Meals').getDataRange().getValues();
@@ -388,7 +385,8 @@ function handleGetAdminDashboard(params = {}) {
   const volData = getSheet('Volunteers').getDataRange().getValues();
   let volCount = 0;
   for (let i = 1; i < volData.length; i++) {
-    if (volData[i][0] === todayYMD || volData[i][0] === targetStr) {
+    const sheetDateStr = normalizeDateStr(volData[i][0]);
+    if (sheetDateStr === targetStr) {
       volCount += Number(volData[i][3]);
     }
   }
@@ -570,7 +568,7 @@ function handleGetVolunteers(params) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][1] === name) {
       list.push({
-        dateStr: data[i][0],
+        dateStr: normalizeDateStr(data[i][0]),
         volunteerName: data[i][2],
         count: Number(data[i][3]),
         timestamp: data[i][4]
@@ -588,7 +586,8 @@ function handleUpdateVolunteer(params) {
   const data = sheet.getDataRange().getValues();
   
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === oldDateStr && data[i][1] === name && data[i][2] === oldVolunteerName) {
+    const sheetDateStr = normalizeDateStr(data[i][0]);
+    if (sheetDateStr === oldDateStr && data[i][1] === name && data[i][2] === oldVolunteerName) {
       sheet.getRange(i + 1, 1).setValue(newDateStr);
       sheet.getRange(i + 1, 3).setValue(newVolunteerName);
       sheet.getRange(i + 1, 4).setValue(count);
@@ -606,11 +605,49 @@ function handleDeleteVolunteer(params) {
   const data = sheet.getDataRange().getValues();
   
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === dateStr && data[i][1] === name && data[i][2] === volunteerName) {
+    const sheetDateStr = normalizeDateStr(data[i][0]);
+    if (sheetDateStr === dateStr && data[i][1] === name && data[i][2] === volunteerName) {
       sheet.deleteRow(i + 1);
       return { success: true };
     }
   }
   return { success: false, message: '삭제 대상을 찾을 수 없습니다.' };
+}
+
+// 날짜 포맷 표준화 헬퍼 (Date 객체나 yyyy-MM-dd 등 다양한 포맷 지원)
+function normalizeDateStr(dateVal) {
+  if (!dateVal) return "";
+  if (dateVal instanceof Date) {
+    return formatToKoreanDate(dateVal);
+  }
+  const dateStr = dateVal.toString().trim();
+  if (dateStr.includes('(') && dateStr.includes(')')) {
+    return dateStr;
+  }
+  const regex = /^(\d{4})-(\d{2})-(\d{2})/;
+  const match = dateStr.match(regex);
+  if (match) {
+    const year = parseInt(match[1]);
+    const month = parseInt(match[2]) - 1;
+    const day = parseInt(match[3]);
+    const d = new Date(year, month, day);
+    return formatToKoreanDate(d);
+  }
+  try {
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+      return formatToKoreanDate(parsed);
+    }
+  } catch(e) {}
+  return dateStr;
+}
+
+// Date 객체를 "M월 d일 (요일)" 포맷으로 변환하는 헬퍼
+function formatToKoreanDate(dateObj) {
+  const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+  const month = dateObj.getMonth() + 1;
+  const date = dateObj.getDate();
+  const dayOfWeek = weekdays[dateObj.getDay()];
+  return month + "월 " + date + "일 (" + dayOfWeek + ")";
 }
 
