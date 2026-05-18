@@ -12,6 +12,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [volunteerName, setVolunteerName] = useState('');
   const [volunteerCount, setVolunteerCount] = useState(1);
+  const [volunteersList, setVolunteersList] = useState([]);
+  const [volunteerDate, setVolunteerDate] = useState('');
+  const [editingVolunteer, setEditingVolunteer] = useState(null);
   
   // Admin Data
   const [adminData, setAdminData] = useState(null);
@@ -49,6 +52,9 @@ export default function Dashboard() {
       curr.setDate(curr.getDate() + 1);
     }
     setMealDates(dates);
+    if (dates.length > 0) {
+      setVolunteerDate(dates[0].dateStr);
+    }
 
     // Fetch saved meals for the user
     if (user?.role !== 'admin' && user?.name && user?.team) {
@@ -77,7 +83,24 @@ export default function Dashboard() {
     if (activeTab === 'personal') {
       fetchPersonalAlarm();
     }
+    if (activeTab === 'volunteer' && user?.role !== 'admin') {
+      fetchVolunteers();
+    }
   }, [activeTab, adminTargetDate]);
+
+  const fetchVolunteers = async () => {
+    setLoading(true);
+    try {
+      const result = await fetchGAS('getVolunteers', { name: user.name });
+      if (result.success && result.data) {
+        setVolunteersList(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch volunteers', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchAdminData = async (targetDateStr = '') => {
     setAdminLoading(true);
@@ -199,18 +222,84 @@ export default function Dashboard() {
 
   const handleAddVolunteer = async (e) => {
     e.preventDefault();
-    if (!volunteerName || volunteerCount < 1) return;
+    if (!volunteerDate || !volunteerName || volunteerCount < 1) return;
     
     setLoading(true);
     try {
-      await fetchGAS('saveVolunteer', { name: user.name, volunteerName, count: volunteerCount });
-      alert(`${volunteerName} 등 ${volunteerCount}명의 자원봉사자 식수가 등록되었습니다.`);
+      if (editingVolunteer) {
+        const res = await fetchGAS('updateVolunteer', {
+          name: user.name,
+          oldDateStr: editingVolunteer.dateStr,
+          oldVolunteerName: editingVolunteer.volunteerName,
+          newDateStr: volunteerDate,
+          newVolunteerName: volunteerName,
+          count: volunteerCount
+        });
+        if (res.success) {
+          alert('자원봉사자 식수 정보가 수정되었습니다.');
+          setEditingVolunteer(null);
+        } else {
+          alert(res.message || '수정 중 오류가 발생했습니다.');
+        }
+      } else {
+        await fetchGAS('saveVolunteer', { 
+          name: user.name, 
+          dateStr: volunteerDate,
+          volunteerName, 
+          count: volunteerCount 
+        });
+        alert(`${volunteerDate} - ${volunteerName} 등 ${volunteerCount}명의 자원봉사자 식수가 등록되었습니다.`);
+      }
+      
       setVolunteerName('');
       setVolunteerCount(1);
+      if (mealDates.length > 0) {
+        setVolunteerDate(mealDates[0].dateStr);
+      }
+      await fetchVolunteers();
     } catch (err) {
-      alert('등록 중 오류가 발생했습니다.');
+      alert('저장 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteVolunteer = async (item) => {
+    if (!window.confirm(`${item.dateStr}의 ${item.volunteerName} 자원봉사자 식수 등록을 삭제하시겠습니까?`)) return;
+    
+    setLoading(true);
+    try {
+      const res = await fetchGAS('deleteVolunteer', {
+        name: user.name,
+        dateStr: item.dateStr,
+        volunteerName: item.volunteerName
+      });
+      if (res.success) {
+        alert('삭제 완료되었습니다.');
+        await fetchVolunteers();
+      } else {
+        alert(res.message || '삭제 중 오류가 발생했습니다.');
+      }
+    } catch (err) {
+      alert('삭제 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartEditVolunteer = (item) => {
+    setEditingVolunteer(item);
+    setVolunteerDate(item.dateStr);
+    setVolunteerName(item.volunteerName);
+    setVolunteerCount(item.count);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingVolunteer(null);
+    setVolunteerName('');
+    setVolunteerCount(1);
+    if (mealDates.length > 0) {
+      setVolunteerDate(mealDates[0].dateStr);
     }
   };
 
@@ -358,45 +447,128 @@ export default function Dashboard() {
         )}
 
         {activeTab === 'volunteer' && (
-          <div className="glass-card" style={{ padding: '32px' }}>
-            <h2 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={20} className="text-primary" />
-              자원봉사자 식수 등록
-            </h2>
-            
-            <form onSubmit={handleAddVolunteer}>
-              <div className="form-group">
-                <label className="label">봉사자 이름 또는 단체명</label>
-                <input 
-                  type="text" 
-                  className="input-field" 
-                  placeholder="예: 대한적십자사 봉사단"
-                  value={volunteerName}
-                  onChange={(e) => setVolunteerName(e.target.value)}
-                  required
-                />
+          <>
+            <div className="glass-card" style={{ padding: '32px' }}>
+              <h2 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={20} className="text-primary" />
+                {editingVolunteer ? '자원봉사자 식수 수정' : '자원봉사자 식수 등록'}
+              </h2>
+              
+              <form onSubmit={handleAddVolunteer}>
+                <div className="form-group">
+                  <label className="label">날짜 선택 (평일)</label>
+                  <select 
+                    className="input-field"
+                    value={volunteerDate}
+                    onChange={(e) => setVolunteerDate(e.target.value)}
+                    required
+                  >
+                    {mealDates.map((d, idx) => (
+                      <option key={idx} value={d.dateStr}>
+                        {d.dateStr} {idx === 0 ? '(오늘)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label">봉사자 이름 또는 단체명</label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    placeholder="예: 대한적십자사 봉사단"
+                    value={volunteerName}
+                    onChange={(e) => setVolunteerName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">식수 인원 (명)</label>
+                  <input 
+                    type="number" 
+                    className="input-field" 
+                    min="1"
+                    value={volunteerCount}
+                    onChange={(e) => setVolunteerCount(parseInt(e.target.value) || 1)}
+                    required
+                  />
+                </div>
+                
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {editingVolunteer && (
+                    <button 
+                      type="button" 
+                      className="btn btn-outline" 
+                      style={{ flex: 1 }}
+                      onClick={handleCancelEdit}
+                    >
+                      취소
+                    </button>
+                  )}
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary" 
+                    style={{ flex: 2 }}
+                    disabled={loading}
+                  >
+                    {loading ? '저장 중...' : (editingVolunteer ? '수정 완료' : '등록하기')}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="glass-card" style={{ padding: '32px' }}>
+              <h2 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={20} className="text-primary" />
+                등록된 자원봉사자 내역
+              </h2>
+              
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+                  <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                    <tr>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>날짜</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>봉사자명</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)' }}>식수</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)' }}>관리</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {volunteersList.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>등록된 자원봉사자가 없습니다.</td>
+                      </tr>
+                    ) : (
+                      volunteersList.map((item, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                          <td style={{ padding: '12px 16px' }}>{item.dateStr}</td>
+                          <td style={{ padding: '12px 16px' }}>{item.volunteerName}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600' }}>{item.count}명</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', gap: '8px' }}>
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '4px 8px', fontSize: '12px', height: 'auto' }}
+                                onClick={() => handleStartEditVolunteer(item)}
+                              >
+                                수정
+                              </button>
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '4px 8px', fontSize: '12px', height: 'auto', borderColor: '#EF4444', color: '#EF4444' }}
+                                onClick={() => handleDeleteVolunteer(item)}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <div className="form-group">
-                <label className="label">식수 인원 (명)</label>
-                <input 
-                  type="number" 
-                  className="input-field" 
-                  min="1"
-                  value={volunteerCount}
-                  onChange={(e) => setVolunteerCount(parseInt(e.target.value) || 1)}
-                  required
-                />
-              </div>
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
-                style={{ width: '100%' }}
-                disabled={loading}
-              >
-                {loading ? '등록 중...' : '등록하기'}
-              </button>
-            </form>
-          </div>
+            </div>
+          </>
         )}
 
         {activeTab === 'personal' && (

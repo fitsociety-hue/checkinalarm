@@ -58,6 +58,12 @@ function doGet(e) {
       result = handleSaveMeals(params);
     } else if (action === 'saveVolunteer') {
       result = handleSaveVolunteer(params);
+    } else if (action === 'getVolunteers') {
+      result = handleGetVolunteers(params);
+    } else if (action === 'updateVolunteer') {
+      result = handleUpdateVolunteer(params);
+    } else if (action === 'deleteVolunteer') {
+      result = handleDeleteVolunteer(params);
     } else if (action === 'getAdminDashboard') {
       result = handleGetAdminDashboard(params);
     } else if (action === 'getMeals') {
@@ -116,6 +122,12 @@ function doPost(e) {
       result = handleSaveMeals(data);
     } else if (action === 'saveVolunteer') {
       result = handleSaveVolunteer(data);
+    } else if (action === 'getVolunteers') {
+      result = handleGetVolunteers(data);
+    } else if (action === 'updateVolunteer') {
+      result = handleUpdateVolunteer(data);
+    } else if (action === 'deleteVolunteer') {
+      result = handleDeleteVolunteer(data);
     } else if (action === 'getAdminDashboard') {
       result = handleGetAdminDashboard(data);
     } else if (action === 'getMeals') {
@@ -190,12 +202,11 @@ function handleSaveConfig(params) {
 
 // 3. 자원봉사자 식수 등록
 function handleSaveVolunteer(params) {
-  const { name, volunteerName, count } = params;
+  const { name, dateStr, volunteerName, count } = params;
   const sheet = getSheet('Volunteers');
-  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const timestamp = new Date();
   
-  sheet.appendRow([today, name, volunteerName, count, timestamp]);
+  sheet.appendRow([dateStr, name, volunteerName, count, timestamp]);
   return { success: true };
 }
 
@@ -548,3 +559,58 @@ function handleTestWebhook(params) {
     return { success: false, message: '전송 실패: 올바른 웹훅 URL인지 확인해주세요.' };
   }
 }
+
+// 12. 직원 자원봉사자 내역 조회
+function handleGetVolunteers(params) {
+  const { name } = params;
+  const sheet = getSheet('Volunteers');
+  const data = sheet.getDataRange().getValues();
+  const list = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === name) {
+      list.push({
+        dateStr: data[i][0],
+        volunteerName: data[i][2],
+        count: Number(data[i][3]),
+        timestamp: data[i][4]
+      });
+    }
+  }
+  
+  return { success: true, data: list };
+}
+
+// 13. 직원 자원봉사자 정보 수정
+function handleUpdateVolunteer(params) {
+  const { name, oldDateStr, oldVolunteerName, newDateStr, newVolunteerName, count } = params;
+  const sheet = getSheet('Volunteers');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === oldDateStr && data[i][1] === name && data[i][2] === oldVolunteerName) {
+      sheet.getRange(i + 1, 1).setValue(newDateStr);
+      sheet.getRange(i + 1, 3).setValue(newVolunteerName);
+      sheet.getRange(i + 1, 4).setValue(count);
+      sheet.getRange(i + 1, 5).setValue(new Date());
+      return { success: true };
+    }
+  }
+  return { success: false, message: '수정 대상을 찾을 수 없습니다.' };
+}
+
+// 14. 직원 자원봉사자 정보 삭제
+function handleDeleteVolunteer(params) {
+  const { name, dateStr, volunteerName } = params;
+  const sheet = getSheet('Volunteers');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === dateStr && data[i][1] === name && data[i][2] === volunteerName) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, message: '삭제 대상을 찾을 수 없습니다.' };
+}
+
