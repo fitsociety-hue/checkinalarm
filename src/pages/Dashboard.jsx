@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Settings, Calendar, Users, Utensils, AlertCircle } from 'lucide-react';
 import { fetchGAS } from '../api';
 
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(user?.role === 'admin' ? 'admin' : 'meal');
   const [mealDates, setMealDates] = useState([]);
   const [loading, setLoading] = useState(false);
