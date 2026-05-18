@@ -375,19 +375,47 @@ import { fetchGAS } from '../api';
               <Settings size={20} className="text-primary" />
               개인 알람 설정
             </h2>
-            <p className="text-muted" style={{ marginBottom: '24px' }}>매일 아침 식사 여부를 체크하도록 개인 구글 챗으로 알림을 받을 수 있습니다.</p>
+            <p className="text-muted" style={{ marginBottom: '24px' }}>매일 아침 식사 여부를 체크하도록 개인 구글 챗으로 알림을 받을 수 있습니다. (선택사항)</p>
             
             <form onSubmit={handlePersonalAlarmSave}>
-              <div className="form-group">
-                <label className="label">구글 챗 웹훅(Webhook) URL</label>
-                <input 
-                  type="url" 
-                  className="input-field" 
-                  placeholder="https://chat.googleapis.com/v1/spaces/..."
-                  value={personalAlarm.webhookUrl}
-                  onChange={(e) => setPersonalAlarm({...personalAlarm, webhookUrl: e.target.value})}
-                  required
-                />
+              <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label className="label">구글 챗 웹훅(Webhook) URL (선택)</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input 
+                    type="url" 
+                    className="input-field" 
+                    placeholder="https://chat.googleapis.com/v1/spaces/..."
+                    value={personalAlarm.webhookUrl}
+                    onChange={(e) => setPersonalAlarm({...personalAlarm, webhookUrl: e.target.value})}
+                    style={{ flex: 1 }}
+                  />
+                  <button 
+                    type="button" 
+                    className="btn btn-outline"
+                    onClick={async () => {
+                      if (!personalAlarm.webhookUrl) {
+                        alert('웹훅 URL을 입력해주세요.');
+                        return;
+                      }
+                      setLoading(true);
+                      try {
+                        const res = await fetchGAS('testWebhook', { 
+                          webhookUrl: personalAlarm.webhookUrl,
+                          testMessage: `🔔 [테스트] ${user.team} ${user.name}님의 식수 관리 개인 알림이 성공적으로 연결되었습니다!`
+                        });
+                        alert(res.message);
+                      } catch (err) {
+                        alert('테스트 알림 전송에 실패했습니다.');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    disabled={loading || !personalAlarm.webhookUrl}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    테스트
+                  </button>
+                </div>
               </div>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>

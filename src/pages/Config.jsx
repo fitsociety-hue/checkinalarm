@@ -90,19 +90,48 @@ export default function Config() {
             </div>
           </div>
 
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: '24px' }}>
             <label className="label">
               구글 챗 웹훅(Webhook) URL <span className="text-primary">*</span>
             </label>
-            <input 
-              type="url" 
-              name="webhookUrl"
-              className="input-field" 
-              placeholder="https://chat.googleapis.com/v1/spaces/..."
-              value={formData.webhookUrl}
-              onChange={handleChange}
-              required
-            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input 
+                type="url" 
+                name="webhookUrl"
+                className="input-field" 
+                placeholder="https://chat.googleapis.com/v1/spaces/..."
+                value={formData.webhookUrl}
+                onChange={handleChange}
+                required
+                style={{ flex: 1 }}
+              />
+              <button 
+                type="button" 
+                className="btn btn-outline"
+                onClick={async () => {
+                  if (!formData.webhookUrl) {
+                    alert('웹훅 URL을 먼저 입력해주세요.');
+                    return;
+                  }
+                  setSaving(true);
+                  try {
+                    const res = await fetchGAS('testWebhook', { 
+                      webhookUrl: formData.webhookUrl,
+                      testMessage: `📢 [테스트] '${formData.systemName}' 관리자 알림이 성공적으로 연결되었습니다!`
+                    });
+                    alert(res.message);
+                  } catch (err) {
+                    alert('테스트 알림 전송에 실패했습니다.');
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                disabled={saving || !formData.webhookUrl}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                연결 테스트
+              </button>
+            </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
               알람을 받을 구글 챗 스페이스의 웹훅 주소입니다.
             </div>

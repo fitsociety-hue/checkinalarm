@@ -70,6 +70,8 @@ function doGet(e) {
       result = handleAdminLogin(params);
     } else if (action === 'changeAdminPassword') {
       result = handleChangeAdminPassword(params);
+    } else if (action === 'testWebhook') {
+      result = handleTestWebhook(params);
     } else {
       result = { success: false, message: '알 수 없는 요청입니다.' };
     }
@@ -124,6 +126,8 @@ function doPost(e) {
       result = handleAdminLogin(data);
     } else if (action === 'changeAdminPassword') {
       result = handleChangeAdminPassword(data);
+    } else if (action === 'testWebhook') {
+      result = handleTestWebhook(data);
     } else {
       result = { success: false, message: '알 수 없는 요청입니다.' };
     }
@@ -479,4 +483,28 @@ function handleChangeAdminPassword(params) {
     }
   }
   return { success: false, message: '관리자 계정을 찾을 수 없습니다.' };
+}
+
+// 11. 구글 챗 웹훅 테스트
+function handleTestWebhook(params) {
+  const { webhookUrl, testMessage } = params;
+  if (!webhookUrl) {
+    return { success: false, message: '웹훅 URL이 입력되지 않았습니다.' };
+  }
+  
+  const payload = {
+    text: testMessage || '✅ 식수 관리 시스템 웹훅 연결 테스트가 성공했습니다!'
+  };
+  
+  try {
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload)
+    };
+    UrlFetchApp.fetch(webhookUrl, options);
+    return { success: true, message: '테스트 알림이 전송되었습니다.' };
+  } catch (e) {
+    return { success: false, message: '전송 실패: 올바른 웹훅 URL인지 확인해주세요.' };
+  }
 }
