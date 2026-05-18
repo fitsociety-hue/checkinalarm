@@ -7,17 +7,14 @@ export const GAS_URL = 'https://script.google.com/macros/s/AKfycbzqu4zzWPR6yJ_qI
  */
 export const fetchGAS = async (action, payload = {}) => {
   try {
-    // GET 요청을 사용하여 CORS 및 프리플라이트(Preflight) 이슈를 원천 차단합니다.
-    const params = new URLSearchParams();
-    params.append('action', action);
-    params.append('data', JSON.stringify(payload));
-    
-    // 타임스탬프를 추가하여 캐싱을 방지합니다.
-    params.append('t', new Date().getTime());
-
-    const url = `${GAS_URL}?${params.toString()}`;
-    const response = await fetch(url, {
-      method: 'GET',
+    // POST 요청과 text/plain을 사용하여 CORS 프리플라이트(OPTIONS) 요청을 우회합니다.
+    const response = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({ action, data: payload }),
+      redirect: 'follow', // 구글 스크립트의 리다이렉트를 따라갑니다.
     });
     
     const result = await response.json();

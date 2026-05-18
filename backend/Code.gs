@@ -54,6 +54,35 @@ function doGet(e) {
   }
 }
 
+// POST 요청(text/plain)을 통해 CORS 프리플라이트를 우회하고 데이터를 안전하게 전송합니다.
+function doPost(e) {
+  try {
+    const params = e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+    const action = params.action;
+    const data = params.data || {};
+    let result = {};
+
+    if (action === 'login') {
+      result = handleLogin(data);
+    } else if (action === 'saveConfig') {
+      result = handleSaveConfig(data);
+    } else if (action === 'saveMeals') {
+      result = handleSaveMeals(data);
+    } else if (action === 'saveVolunteer') {
+      result = handleSaveVolunteer(data);
+    } else {
+      result = { success: false, message: '알 수 없는 요청입니다.' };
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 // ==========================================
 // 핸들러 함수들
 // ==========================================
