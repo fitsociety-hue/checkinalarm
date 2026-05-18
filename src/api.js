@@ -32,7 +32,7 @@ export const fetchGAS = (action, payload = {}) => {
       clearTimeout(timeout);
       delete window[callbackName];
       document.body.removeChild(script);
-      reject(new Error('서버 연결에 실패했습니다. 올바른 Google Apps Script URL인지 확인해주세요.'));
+      reject(new Error('[주소 불일치] 새 배포 URL이 적용되지 않았습니다. Code.gs를 새 배포한 후, 그 URL을 api.js의 GAS_URL에 덮어쓰기 해야 합니다.'));
     };
 
     document.body.appendChild(script);
