@@ -2,9 +2,28 @@
 // 식사 체크인 시스템 Backend (Code.gs)
 // ==========================================
 
-// 현재 연결된 스프레드시트의 ID를 자동으로 가져옵니다.
-// 만약 에러가 발생한다면, 이 부분을 실제 스프레드시트 ID 문자열(예: '1A2B3C...')로 직접 교체해주세요.
-const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
+// 만약 Web App에서 스프레드시트를 자동으로 찾지 못해 에러가 발생한다면,
+// 아래 따옴표 안에 실제 스프레드시트 ID(URL의 /d/ 와 /edit 사이 문자열)를 입력하세요.
+const SPREADSHEET_ID = ""; 
+
+function getSheet(sheetName) {
+  let ss;
+  if (SPREADSHEET_ID) {
+    ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  } else {
+    ss = SpreadsheetApp.getActive();
+  }
+  
+  if (!ss) {
+    throw new Error("스프레드시트를 찾을 수 없습니다. 코드 최상단의 SPREADSHEET_ID 값을 직접 입력해주세요.");
+  }
+  
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error(`'${sheetName}' 시트를 찾을 수 없습니다. 시트 이름이 정확한지 확인해주세요.`);
+  }
+  return sheet;
+}
 
 // CORS 이슈를 원천 차단하기 위해 GET 요청으로 통신합니다.
 function doGet(e) {
@@ -29,6 +48,7 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
+    // 에러 발생 시 500 에러(HTML)가 아닌 정상적인 JSON 응답으로 반환하여 CORS 에러를 방지합니다.
     return ContentService.createTextOutput(JSON.stringify({ success: false, message: error.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
@@ -41,7 +61,7 @@ function doGet(e) {
 // 1. 회원가입 및 로그인 처리
 function handleLogin(params) {
   const { name, team, pin } = params;
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Users');
+  const sheet = getSheet('Users');
   const data = sheet.getDataRange().getValues();
   
   // 첫 행은 헤더이므로 제외하고 검색
@@ -57,7 +77,6 @@ function handleLogin(params) {
   }
   
   // 등록된 정보가 없으면 신규 회원가입 처리 (기본 employee 권한)
-  // 단, 이름에 '관리자'가 포함된 경우 자동으로 admin 권한 부여 (테스트용)
   const role = name.includes('관리자') ? 'admin' : 'employee';
   sheet.appendRow([name, team, pin, role]);
   return { success: true, role: role, message: '회원가입이 완료되었습니다.' };
@@ -66,7 +85,7 @@ function handleLogin(params) {
 // 2. 알람 시스템 설정 저장 (Config)
 function handleSaveConfig(params) {
   const { systemName, sheetUrl, webhookUrl, startDate, endDate, weekdayOnly } = params;
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Config');
+  const sheet = getSheet('Config');
   
   // 기존 설정 덮어쓰기 (항상 2번째 행에 저장)
   if (sheet.getLastRow() > 1) {
@@ -79,8 +98,8 @@ function handleSaveConfig(params) {
 
 // 3. 자원봉사자 식수 등록
 function handleSaveVolunteer(params) {
-  const { name, volunteerName, count } = params; // name은 등록한 직원 이름
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Volunteers');
+  const { name, volunteerName, count } = params;
+  const sheet = getSheet('Volunteers');
   const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const timestamp = new Date();
   
@@ -90,13 +109,12 @@ function handleSaveVolunteer(params) {
 
 // 4. 직원 식사 일정 저장 (업데이트)
 function handleSaveMeals(params) {
-  const { name, team, dates } = params; // dates = [{dateStr, status}]
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Meals');
+  const { name, team, dates } = params;
+  const sheet = getSheet('Meals');
   const data = sheet.getDataRange().getValues();
   
   dates.forEach(item => {
     let rowUpdated = false;
-    // 기존 데이터 덮어쓰기 로직
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === item.dateStr && data[i][1] === name && data[i][2] === team) {
         sheet.getRange(i + 1, 4).setValue(item.status);
@@ -105,7 +123,6 @@ function handleSaveMeals(params) {
         break;
       }
     }
-    // 없으면 추가
     if (!rowUpdated) {
       sheet.appendRow([item.dateStr, name, team, item.status, new Date()]);
     }
@@ -133,7 +150,7 @@ function checkAndSendAlert() {
   const day = todayDate.getDay();
   
   // 주말(토=6, 일=0) 제외 로직 (Config의 weekdayOnly 반영)
-  const configSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Config');
+  const configSheet = getSheet('Config');
   const configData = configSheet.getDataRange().getValues();
   if (configData.length < 2) return; // 설정 없음
   
@@ -146,13 +163,13 @@ function checkAndSendAlert() {
   const todayStr = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
   
   // 1. 전체 직원 목록 가져오기
-  const usersSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Users');
+  const usersSheet = getSheet('Users');
   const usersData = usersSheet.getDataRange().getValues();
   const totalEmployees = usersData.length - 1; // 헤더 제외
   if (totalEmployees <= 0) return;
   
   // 2. 오늘의 식사 체크인 기록 가져오기
-  const mealsSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Meals');
+  const mealsSheet = getSheet('Meals');
   const mealsData = mealsSheet.getDataRange().getValues();
   
   let checkedCount = 0;
@@ -184,9 +201,9 @@ function processUncheckedAsNoMeal() {
   const todayDate = new Date();
   const todayStr = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
   
-  const usersSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Users');
+  const usersSheet = getSheet('Users');
   const usersData = usersSheet.getDataRange().getValues();
-  const mealsSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Meals');
+  const mealsSheet = getSheet('Meals');
   const mealsData = mealsSheet.getDataRange().getValues();
   
   // 이미 체크된 직원 찾기
