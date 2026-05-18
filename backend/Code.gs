@@ -132,15 +132,23 @@ function doPost(e) {
 
 // 1. 회원가입 및 로그인 처리
 function handleLogin(params) {
-  const { name, team, pin } = params;
+  const { name, team, pin, loginType, adminCode } = params;
   const sheet = getSheet('Users');
   const data = sheet.getDataRange().getValues();
   
+  // 관리자 가입/로그인 시 보안 코드 확인 (예: 1234)
+  if (loginType === 'admin' && adminCode !== '1234') {
+    return { success: false, message: '관리자 인증 코드가 올바르지 않습니다.' };
+  }
+
   // 첫 행은 헤더이므로 제외하고 검색
   for (let i = 1; i < data.length; i++) {
     const [sName, sTeam, sPin, sRole] = data[i];
     if (sName === name && sTeam === team) {
       if (sPin.toString() === pin.toString()) {
+        if (loginType === 'admin' && sRole !== 'admin') {
+          return { success: false, message: '해당 계정은 관리자 권한이 없습니다. 일반 직원으로 로그인해주세요.' };
+        }
         return { success: true, role: sRole };
       } else {
         return { success: false, message: '비밀번호가 일치하지 않습니다.' };
@@ -148,8 +156,8 @@ function handleLogin(params) {
     }
   }
   
-  // 등록된 정보가 없으면 신규 회원가입 처리 (기본 employee 권한)
-  const role = name.includes('관리자') ? 'admin' : 'employee';
+  // 등록된 정보가 없으면 신규 회원가입 처리
+  const role = loginType === 'admin' ? 'admin' : (name.includes('관리자') ? 'admin' : 'employee');
   sheet.appendRow([name, team, pin, role]);
   return { success: true, role: role, message: '회원가입이 완료되었습니다.' };
 }

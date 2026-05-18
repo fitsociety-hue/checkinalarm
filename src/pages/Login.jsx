@@ -5,9 +5,11 @@ import { LogIn } from 'lucide-react';
 import { fetchGAS } from '../api';
 
 export default function Login() {
+  const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
   const [pin, setPin] = useState('');
+  const [adminCode, setAdminCode] = useState(''); // Optional: for extra security
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -24,7 +26,7 @@ export default function Login() {
     setError('');
 
     try {
-      const data = await fetchGAS('login', { name, team, pin });
+      const data = await fetchGAS('login', { name, team, pin, loginType, adminCode });
 
       if (data.success) {
         login({ name, team, pin, role: data.role || 'employee' });
@@ -59,6 +61,23 @@ export default function Login() {
           </div>
         )}
 
+        <div className="tabs" style={{ marginBottom: '24px' }}>
+          <button 
+            className={`tab ${loginType === 'employee' ? 'active' : ''}`}
+            onClick={() => setLoginType('employee')}
+            style={{ padding: '8px' }}
+          >
+            일반 직원
+          </button>
+          <button 
+            className={`tab ${loginType === 'admin' ? 'active' : ''}`}
+            onClick={() => setLoginType('admin')}
+            style={{ padding: '8px' }}
+          >
+            관리자
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="label" htmlFor="name">이름</label>
@@ -86,7 +105,7 @@ export default function Login() {
             />
           </div>
 
-          <div className="form-group" style={{ marginBottom: '32px' }}>
+          <div className="form-group" style={{ marginBottom: loginType === 'admin' ? '16px' : '32px' }}>
             <label className="label" htmlFor="pin">비밀번호 (숫자 4자리)</label>
             <input
               id="pin"
@@ -100,6 +119,21 @@ export default function Login() {
               required
             />
           </div>
+
+          {loginType === 'admin' && (
+            <div className="form-group" style={{ marginBottom: '32px' }}>
+              <label className="label" htmlFor="adminCode">관리자 인증 코드</label>
+              <input
+                id="adminCode"
+                type="password"
+                className="input-field"
+                placeholder="초기 가입시 1234 입력"
+                value={adminCode}
+                onChange={(e) => setAdminCode(e.target.value)}
+                required={loginType === 'admin'}
+              />
+            </div>
+          )}
 
           <button 
             type="submit" 
