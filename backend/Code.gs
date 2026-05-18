@@ -25,11 +25,12 @@ function getSheet(sheetName) {
   return sheet;
 }
 
-// CORS 이슈를 원천 차단하기 위해 GET 요청으로 통신합니다.
+// CORS 이슈를 원천 차단하기 위해 GET 요청(JSONP)으로 통신합니다.
 function doGet(e) {
   try {
     const action = e.parameter.action;
     const params = e.parameter.data ? JSON.parse(e.parameter.data) : {};
+    const callback = e.parameter.callback;
     let result = {};
 
     if (action === 'login') {
@@ -44,13 +45,25 @@ function doGet(e) {
       result = { success: false, message: '알 수 없는 요청입니다.' };
     }
 
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
+    if (callback) {
+      return ContentService.createTextOutput(callback + '(' + JSON.stringify(result) + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    } else {
+      return ContentService.createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
   } catch (error) {
-    // 에러 발생 시 500 에러(HTML)가 아닌 정상적인 JSON 응답으로 반환하여 CORS 에러를 방지합니다.
-    return ContentService.createTextOutput(JSON.stringify({ success: false, message: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    const callback = e.parameter ? e.parameter.callback : null;
+    const errorResult = JSON.stringify({ success: false, message: error.toString() });
+    
+    if (callback) {
+      return ContentService.createTextOutput(callback + '(' + errorResult + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    } else {
+      return ContentService.createTextOutput(errorResult)
+        .setMimeType(ContentService.MimeType.JSON);
+    }
   }
 }
 

@@ -1,26 +1,40 @@
 // Google Apps Script Web App URL
 export const GAS_URL = 'https://script.google.com/macros/s/AKfycbzqu4zzWPR6yJ_qI1M64R1tgdP7G5pI06upLFlgQmq5jWE2MU8d7Ks9lC_3M_wdLiEt/exec';
 
-/**
- * Sends a request to Google Apps Script Backend
- * Using POST with text/plain to avoid CORS preflight issues
- */
-export const fetchGAS = async (action, payload = {}) => {
-  try {
-    // POST 요청과 text/plain을 사용하여 CORS 프리플라이트(OPTIONS) 요청을 우회합니다.
-    const response = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify({ action, data: payload }),
-      redirect: 'follow', // 구글 스크립트의 리다이렉트를 따라갑니다.
-    });
+export const fetchGAS = (action, payload = {}) => {
+  return new Promise((resolve, reject) => {
+    // 15초 타임아웃 설정 (구글 로그인 화면으로 리다이렉트되거나 스크립트 오류 시 무한 대기 방지)
+    const timeout = setTimeout(() => {
+      reject(new Error('서버 응답 시간이 초과되었습니다. (웹 앱 권한 설정이 "모든 사용자"인지 확인해주세요.)'));
+    }, 15000);
+
+    const callbackName = 'gas_callback_' + Math.round(100000 * Math.random());
     
-    const result = await response.json();
-    return result;
-  } catch (error) {
-    console.error('GAS API Error:', error);
-    throw error;
-  }
+    // 글로벌 콜백 함수 정의 (JSONP 방식)
+    window[callbackName] = (data) => {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
+
+    const params = new URLSearchParams();
+    params.append('action', action);
+    params.append('data', JSON.stringify(payload));
+    params.append('callback', callbackName);
+    params.append('t', new Date().getTime());
+
+    const script = document.createElement('script');
+    script.src = `${GAS_URL}?${params.toString()}`;
+    
+    // 스크립트 로드 실패 시 에러 처리
+    script.onerror = (err) => {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      document.body.removeChild(script);
+      reject(new Error('서버 연결에 실패했습니다. 올바른 Google Apps Script URL인지 확인해주세요.'));
+    };
+
+    document.body.appendChild(script);
+  });
 };
