@@ -374,19 +374,21 @@ function handleGetAdminDashboard(params = {}) {
   let mealCount = 0;
   let noMealCount = 0;
   let undecidedCount = 0;
-  const checkedUsers = [];
+  const checkedUsers = {}; // 배열이 아닌 객체로 선언해야 key 기반 조회가 가능
 
   for (let i = 1; i < mealsData.length; i++) {
     if (cleanDateStr(mealsData[i][0]) === targetStrClean) {
-      if (mealsData[i][3] === 'meal') {
+      const key = mealsData[i][1] + "_" + mealsData[i][2];
+      const mealStatus = mealsData[i][3];
+      if (mealStatus === 'meal') {
         mealCount++;
-        checkedUsers[mealsData[i][1] + "_" + mealsData[i][2]] = 'meal';
-      } else if (mealsData[i][3] === 'no-meal') {
+        checkedUsers[key] = 'meal';
+      } else if (mealStatus === 'no-meal') {
         noMealCount++;
-        checkedUsers[mealsData[i][1] + "_" + mealsData[i][2]] = 'no-meal';
-      } else if (mealsData[i][3] === 'none' || mealsData[i][3] === '미정') {
+        checkedUsers[key] = 'no-meal';
+      } else if (mealStatus === 'none' || mealStatus === '미정') {
         undecidedCount++;
-        checkedUsers[mealsData[i][1] + "_" + mealsData[i][2]] = '미정';
+        checkedUsers[key] = '미정';
       }
     }
   }
@@ -401,7 +403,10 @@ function handleGetAdminDashboard(params = {}) {
     }
   }
 
-  // 전체 유저 중 미체크 및 미정 인원 찾기
+  // 전체 유저 중 미체크(기록없음) 및 미정 인원 찾기
+  // - 식사/미식사를 선택한 직원은 목록에 나타나지 않음
+  // - 미정을 선택한 직원은 '미정' 상태로 표시
+  // - 아무것도 선택하지 않은 직원은 '미체크' 상태로 표시
   const usersData = getSheet('Users').getDataRange().getValues();
   const uncheckedUsers = [];
   let totalEmployees = 0;
@@ -413,7 +418,14 @@ function handleGetAdminDashboard(params = {}) {
     
     totalEmployees++;
     const status = checkedUsers[uName + "_" + uTeam];
-    if (!status || status === '미정') {
+    // 식사 또는 미식사를 선택한 직원은 목록에서 제외
+    if (status === 'meal' || status === 'no-meal') continue;
+    
+    // 미정이거나 아무 기록이 없는 경우만 목록에 추가 (상태 구분하여 표시)
+    if (status === '미정') {
+      uncheckedUsers.push({ name: uName, team: uTeam, status: '미정' });
+    } else {
+      // status가 undefined = 아무 기록 없음 = 미체크
       uncheckedUsers.push({ name: uName, team: uTeam, status: '미체크' });
     }
   }

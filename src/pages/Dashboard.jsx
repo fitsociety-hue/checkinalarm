@@ -784,8 +784,18 @@ export default function Dashboard() {
                           <tr key={i} style={{ borderBottom: '1px solid #F3F4F6' }}>
                             <td style={{ padding: '12px 16px' }}>{u.team}</td>
                             <td style={{ padding: '12px 16px' }}>{u.name}</td>
-                            <td style={{ padding: '12px 16px', color: u.status === '미체크' ? 'var(--danger)' : '#6B7280' }}>
-                              {u.status}
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '2px 10px',
+                                borderRadius: '12px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                backgroundColor: u.status === '미체크' ? '#FEE2E2' : '#F3F4F6',
+                                color: u.status === '미체크' ? '#DC2626' : '#6B7280'
+                              }}>
+                                {u.status}
+                              </span>
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                               <div style={{ display: 'inline-flex', gap: '8px' }}>
