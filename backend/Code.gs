@@ -404,9 +404,9 @@ function handleGetAdminDashboard(params = {}) {
   }
 
   // 전체 유저 중 미체크(기록없음) 및 미정 인원 찾기
-  // - 식사/미식사를 선택한 직원은 목록에 나타나지 않음
-  // - 미정을 선택한 직원은 '미정' 상태로 표시
-  // - 아무것도 선택하지 않은 직원은 '미체크' 상태로 표시
+  // [시나리오]
+  // - 식사 또는 미식사를 선택한 직원 → 목록에 표시하지 않음
+  // - 미정을 선택했거나 아무 기록도 없는 직원 → 목록에 '미체크'로 표시
   const usersData = getSheet('Users').getDataRange().getValues();
   const uncheckedUsers = [];
   let totalEmployees = 0;
@@ -418,16 +418,12 @@ function handleGetAdminDashboard(params = {}) {
     
     totalEmployees++;
     const status = checkedUsers[uName + "_" + uTeam];
+    
     // 식사 또는 미식사를 선택한 직원은 목록에서 제외
     if (status === 'meal' || status === 'no-meal') continue;
     
-    // 미정이거나 아무 기록이 없는 경우만 목록에 추가 (상태 구분하여 표시)
-    if (status === '미정') {
-      uncheckedUsers.push({ name: uName, team: uTeam, status: '미정' });
-    } else {
-      // status가 undefined = 아무 기록 없음 = 미체크
-      uncheckedUsers.push({ name: uName, team: uTeam, status: '미체크' });
-    }
+    // 미정 선택 또는 기록 없음 → 모두 '미체크'로 통일 표시
+    uncheckedUsers.push({ name: uName, team: uTeam, status: '미체크' });
   }
 
   return {

@@ -791,8 +791,8 @@ export default function Dashboard() {
                                 borderRadius: '12px',
                                 fontSize: '13px',
                                 fontWeight: '600',
-                                backgroundColor: u.status === '미체크' ? '#FEE2E2' : '#F3F4F6',
-                                color: u.status === '미체크' ? '#DC2626' : '#6B7280'
+                                backgroundColor: '#FEE2E2',
+                                color: '#DC2626'
                               }}>
                                 {u.status}
                               </span>
