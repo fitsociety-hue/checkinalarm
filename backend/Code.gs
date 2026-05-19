@@ -282,12 +282,19 @@ function checkAndSendAlert() {
     return; // 평일만 알람인데 주말인 경우 패스
   }
   
-  const todayStr = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
+  const todayStr = formatToKoreanDate(todayDate);
+  const todayStrClean = cleanDateStr(todayStr);
   
   // 1. 전체 직원 목록 가져오기
   const usersSheet = getSheet('Users');
   const usersData = usersSheet.getDataRange().getValues();
-  const totalEmployees = usersData.length - 1; // 헤더 제외
+  let totalEmployees = 0;
+  for (let i = 1; i < usersData.length; i++) {
+    const name = usersData[i][0];
+    if (name && name !== 'admin') {
+      totalEmployees++;
+    }
+  }
   if (totalEmployees <= 0) return;
   
   // 2. 오늘의 식사 체크인 기록 가져오기
@@ -296,7 +303,7 @@ function checkAndSendAlert() {
   
   let checkedCount = 0;
   for (let i = 1; i < mealsData.length; i++) {
-    if (mealsData[i][0] === todayStr) {
+    if (cleanDateStr(mealsData[i][0]) === todayStrClean) {
       checkedCount++;
     }
   }
@@ -321,7 +328,8 @@ function checkAndSendAlert() {
 // 11시 이후 누락자 일괄 미식사 처리 로직 (트리거용)
 function processUncheckedAsNoMeal() {
   const todayDate = new Date();
-  const todayStr = Utilities.formatDate(todayDate, Session.getScriptTimeZone(), 'MMM d, EEE');
+  const todayStr = formatToKoreanDate(todayDate);
+  const todayStrClean = cleanDateStr(todayStr);
   
   const usersSheet = getSheet('Users');
   const usersData = usersSheet.getDataRange().getValues();
@@ -331,7 +339,7 @@ function processUncheckedAsNoMeal() {
   // 이미 체크된 직원 찾기
   const checkedNames = [];
   for (let i = 1; i < mealsData.length; i++) {
-    if (mealsData[i][0] === todayStr) {
+    if (cleanDateStr(mealsData[i][0]) === todayStrClean) {
       checkedNames.push(mealsData[i][1] + "_" + mealsData[i][2]); // 이름_팀명
     }
   }
@@ -340,6 +348,7 @@ function processUncheckedAsNoMeal() {
   for (let i = 1; i < usersData.length; i++) {
     const name = usersData[i][0];
     const team = usersData[i][1];
+    if (!name || name === 'admin') continue;
     
     if (!checkedNames.includes(name + "_" + team)) {
       mealsSheet.appendRow([todayStr, name, team, 'no-meal', new Date()]);
@@ -358,6 +367,7 @@ function handleGetAdminDashboard(params = {}) {
   
   // 클라이언트에서 지정한 날짜 문자열이 있으면 그걸 사용하고, 없으면 오늘 날짜 문자열 사용
   const targetStr = targetDateStr || formatToKoreanDate(todayDate);
+  const targetStrClean = cleanDateStr(targetStr);
 
   // 식사 데이터 집계
   const mealsData = getSheet('Meals').getDataRange().getValues();
@@ -367,7 +377,7 @@ function handleGetAdminDashboard(params = {}) {
   const checkedUsers = [];
 
   for (let i = 1; i < mealsData.length; i++) {
-    if (mealsData[i][0] === targetStr) {
+    if (cleanDateStr(mealsData[i][0]) === targetStrClean) {
       if (mealsData[i][3] === 'meal') {
         mealCount++;
         checkedUsers[mealsData[i][1] + "_" + mealsData[i][2]] = 'meal';
@@ -386,7 +396,7 @@ function handleGetAdminDashboard(params = {}) {
   let volCount = 0;
   for (let i = 1; i < volData.length; i++) {
     const sheetDateStr = normalizeDateStr(volData[i][0]);
-    if (sheetDateStr === targetStr) {
+    if (cleanDateStr(sheetDateStr) === targetStrClean) {
       volCount += Number(volData[i][3]);
     }
   }
@@ -403,15 +413,10 @@ function handleGetAdminDashboard(params = {}) {
     
     totalEmployees++;
     const status = checkedUsers[uName + "_" + uTeam];
-    if (!status) {
+    if (!status || status === '미정') {
       uncheckedUsers.push({ name: uName, team: uTeam, status: '미체크' });
-    } else if (status === '미정') {
-      uncheckedUsers.push({ name: uName, team: uTeam, status: '미정' });
     }
   }
-
-  // 식사 또는 미식사로 체크된 사람들도 상태를 볼 수 있도록 합치기 원한다면 로직 추가 가능
-  // 현재는 미체크/미정 인원만 반환
 
   return {
     success: true,
@@ -428,15 +433,16 @@ function handleGetAdminDashboard(params = {}) {
 
 // 6. 관리자: 식사 여부 직접 변경
 function handleUpdateMealStatus(params) {
-  const { name, team, status } = params;
-  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, EEE');
+  const { name, team, status, dateStr } = params;
+  const targetDate = dateStr ? normalizeDateStr(dateStr) : formatToKoreanDate(new Date());
+  const targetDateClean = cleanDateStr(targetDate);
   
   const sheet = getSheet('Meals');
   const data = sheet.getDataRange().getValues();
   
   let updated = false;
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === todayStr && data[i][1] === name && data[i][2] === team) {
+    if (cleanDateStr(data[i][0]) === targetDateClean && data[i][1] === name && data[i][2] === team) {
       sheet.getRange(i + 1, 4).setValue(status);
       sheet.getRange(i + 1, 5).setValue(new Date());
       updated = true;
@@ -445,7 +451,7 @@ function handleUpdateMealStatus(params) {
   }
   
   if (!updated) {
-    sheet.appendRow([todayStr, name, team, status, new Date()]);
+    sheet.appendRow([targetDate, name, team, status, new Date()]);
   }
   
   return { success: true };
@@ -649,5 +655,12 @@ function formatToKoreanDate(dateObj) {
   const date = dateObj.getDate();
   const dayOfWeek = weekdays[dateObj.getDay()];
   return month + "월 " + date + "일 (" + dayOfWeek + ")";
+}
+
+// 공백 제거 및 날짜 형식 표준화 비교 헬퍼
+function cleanDateStr(str) {
+  if (!str) return "";
+  let normalized = normalizeDateStr(str);
+  return normalized.replace(/\s+/g, "");
 }
 

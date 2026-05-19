@@ -153,11 +153,13 @@ export default function Dashboard() {
   };
 
   const handleAdminUpdateMeal = async (empName, empTeam, status) => {
-    if (!window.confirm(`${empName}님의 식사 여부를 '${status === 'meal' ? '식사' : '미식사'}'로 변경하시겠습니까?`)) return;
+    const statusText = status === 'meal' ? '식사' : status === 'no-meal' ? '미식사' : '미정';
+    if (!window.confirm(`${empName}님의 식사 여부를 '${statusText}'으로 변경하시겠습니까?`)) return;
     
     setAdminLoading(true);
     try {
-      await fetchGAS('updateMealStatus', { name: empName, team: empTeam, status });
+      const selectedDate = adminTargetDate || new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
+      await fetchGAS('updateMealStatus', { name: empName, team: empTeam, status, dateStr: selectedDate });
       // Refresh admin data
       await fetchAdminData(adminTargetDate);
       alert('상태가 변경되었습니다.');
