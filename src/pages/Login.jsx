@@ -50,7 +50,12 @@ export default function Login() {
       }
     } catch (err) {
       console.error(err);
-      setError('서버와 통신할 수 없습니다.');
+      const msg = err.message || '';
+      if (msg.includes('초과') || msg.includes('timeout')) {
+        setError('서버 응답이 너무 늦습니다. 잠시 후 다시 시도해 주세요.');
+      } else {
+        setError('서버와 연결할 수 없습니다.\n네트워크(Wi-Fi 또는 데이터) 상태를 확인하고 다시 시도해 주세요.');
+      }
     } finally {
       setLoading(false);
     }
@@ -67,8 +72,21 @@ export default function Login() {
         </p>
 
         {error && (
-          <div style={{ backgroundColor: '#FEE2E2', color: '#DC2626', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>
-            {error}
+          <div style={{
+            backgroundColor: '#FEE2E2',
+            color: '#DC2626',
+            padding: '14px 16px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            fontSize: '14px',
+            lineHeight: '1.6',
+            whiteSpace: 'pre-line',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px'
+          }}>
+            <span style={{ fontSize: '18px', flexShrink: 0 }}>⚠️</span>
+            <span>{error}</span>
           </div>
         )}
 
@@ -170,7 +188,10 @@ export default function Login() {
             disabled={loading}
           >
             {loading ? (
-              <div className="loader" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                <div className="loader" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div>
+                <span>연결 중... 잠시만 기다려 주세요</span>
+              </span>
             ) : (
               <>
                 <LogIn size={18} />
