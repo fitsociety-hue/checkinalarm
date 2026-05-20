@@ -215,3 +215,202 @@ body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Sub-tabs styling */
+.sub-tabs {
+  border-bottom: 1px solid #E5E7EB;
+  margin-bottom: 24px;
+  display: flex;
+  gap: 16px;
+}
+
+.sub-tabs .tab {
+  font-size: 14px;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-muted);
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+.sub-tabs .tab:hover {
+  color: var(--primary-color);
+}
+
+.sub-tabs .tab.active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.sub-tabs .tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--primary-color);
+}
+
+/* Responsive hidden helper */
+@media (max-width: 640px) {
+  .hidden-mobile {
+    display: none !important;
+  }
+  
+  .report-summary-cards {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Print Optimization Styles */
+@media print {
+  /* Set exact print color behavior and margins */
+  @page {
+    size: A4 landscape;
+    margin: 10mm 15mm 10mm 15mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    background-image: none !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Reset layout for container */
+  .page-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .glass-card {
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Hide navigation, buttons, filters, password change etc. */
+  .no-print, 
+  .tabs, 
+  .sub-tabs, 
+  button, 
+  .btn, 
+  .input-field,
+  label,
+  select,
+  form,
+  .header,
+  .auth-card {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Print Section Specifics */
+  #print-section {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  /* Header Optimization */
+  .report-header {
+    margin-bottom: 20px !important;
+    border-bottom: 2px solid #000000 !important;
+    padding-bottom: 10px !important;
+  }
+
+  .report-header h2 {
+    color: #000000 !important;
+    font-size: 20pt !important;
+    font-weight: 700 !important;
+  }
+
+  .report-header p {
+    color: #333333 !important;
+    font-size: 10pt !important;
+  }
+
+  /* Report Summary Cards */
+  .report-summary-cards {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 20px !important;
+  }
+
+  .report-summary-cards > div {
+    background: #f3f4f6 !important;
+    border: 1px solid #d1d5db !important;
+    padding: 10px !important;
+    border-radius: 6px !important;
+    text-align: center !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .report-summary-cards > div div:first-child {
+    color: #374151 !important;
+    font-size: 8pt !important;
+    font-weight: 600 !important;
+  }
+
+  .report-summary-cards > div div:last-child {
+    color: #000000 !important;
+    font-size: 14pt !important;
+    font-weight: bold !important;
+  }
+
+  /* Report Table Optimization */
+  .report-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9pt !important;
+  }
+
+  .report-table th, 
+  .report-table td {
+    border: 1px solid #4b5563 !important;
+    padding: 6px 8px !important;
+    color: #000000 !important;
+    word-break: break-all !important;
+  }
+
+  .report-table th {
+    background-color: #e5e7eb !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .report-table tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  /* Badge styling in print */
+  .report-table span {
+    background: transparent !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    font-weight: 600 !important;
+    font-size: 9pt !important;
+    border: none !important;
+  }
+}

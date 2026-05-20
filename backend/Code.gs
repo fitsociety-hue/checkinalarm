@@ -66,6 +66,8 @@ function doGet(e) {
       result = handleDeleteVolunteer(params);
     } else if (action === 'getAdminDashboard') {
       result = handleGetAdminDashboard(params);
+    } else if (action === 'getReportData') {
+      result = handleGetReportData(params);
     } else if (action === 'getMeals') {
       result = handleGetMeals(params);
     } else if (action === 'updateMealStatus') {
@@ -130,6 +132,8 @@ function doPost(e) {
       result = handleDeleteVolunteer(data);
     } else if (action === 'getAdminDashboard') {
       result = handleGetAdminDashboard(data);
+    } else if (action === 'getReportData') {
+      result = handleGetReportData(data);
     } else if (action === 'getMeals') {
       result = handleGetMeals(data);
     } else if (action === 'updateMealStatus') {
@@ -670,5 +674,68 @@ function cleanDateStr(str) {
   if (!str) return "";
   let normalized = normalizeDateStr(str);
   return normalized.replace(/\s+/g, "");
+}
+
+// 15. 관리자: 식수 전체 실적 데이터 가져오기 (Users, Meals, Volunteers 시트 통합 조회)
+function handleGetReportData() {
+  try {
+    const usersSheet = getSheet('Users');
+    const mealsSheet = getSheet('Meals');
+    const volSheet = getSheet('Volunteers');
+    
+    const usersData = usersSheet.getDataRange().getValues();
+    const mealsData = mealsSheet.getDataRange().getValues();
+    const volData = volSheet.getDataRange().getValues();
+    
+    const users = [];
+    for (let i = 1; i < usersData.length; i++) {
+      const [name, team, pin, role] = usersData[i];
+      if (name && name !== 'admin') {
+        users.push({
+          name: name.toString().trim(),
+          team: team.toString().trim()
+        });
+      }
+    }
+    
+    const meals = [];
+    for (let i = 1; i < mealsData.length; i++) {
+      const [dateStr, name, team, status, timestamp] = mealsData[i];
+      if (dateStr) {
+        meals.push({
+          dateStr: dateStr.toString().trim(),
+          name: name.toString().trim(),
+          team: team.toString().trim(),
+          status: status.toString().trim(),
+          timestamp: timestamp ? timestamp.toString() : null
+        });
+      }
+    }
+    
+    const volunteers = [];
+    for (let i = 1; i < volData.length; i++) {
+      const [dateStr, recorder, volunteerName, count, timestamp] = volData[i];
+      if (dateStr) {
+        volunteers.push({
+          dateStr: dateStr.toString().trim(),
+          recorder: recorder.toString().trim(),
+          volunteerName: volunteerName.toString().trim(),
+          count: Number(count) || 0,
+          timestamp: timestamp ? timestamp.toString() : null
+        });
+      }
+    }
+    
+    return {
+      success: true,
+      data: {
+        users: users,
+        meals: meals,
+        volunteers: volunteers
+      }
+    };
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  }
 }
 

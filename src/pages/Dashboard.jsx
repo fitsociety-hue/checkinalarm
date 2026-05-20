@@ -36,6 +36,288 @@ export default function Dashboard() {
     return now.getHours() >= 11;
   };
 
+  const [adminSubTab, setAdminSubTab] = useState('today'); // 'today' | 'report'
+  
+  // Report states
+  const [reportRawData, setReportRawData] = useState({ users: [], meals: [], volunteers: [] });
+  const [reportLoading, setReportLoading] = useState(false);
+  const [periodType, setPeriodType] = useState('day'); // 'day', 'week', 'month', 'quarter'
+  const [selectedDay, setSelectedDay] = useState(new Date().toISOString().split('T')[0]); // yyyy-MM-dd
+  
+  const getCurrentWeekString = (date = new Date()) => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  };
+  
+  const [selectedWeek, setSelectedWeek] = useState(getCurrentWeekString());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedQuarter, setSelectedQuarter] = useState(Math.ceil((new Date().getMonth() + 1) / 3));
+  
+  const [outputType, setOutputType] = useState('mealsOnly'); // 'mealsOnly', 'all'
+  const [selectedTeam, setSelectedTeam] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const fetchReportData = async () => {
+    setReportLoading(true);
+    try {
+      const result = await fetchGAS('getReportData');
+      if (result.success && result.data) {
+        setReportRawData(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch report data', err);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const parseKoreanDate = (dateStr, timestampStr) => {
+    if (!dateStr) return null;
+    let year = new Date().getFullYear();
+    if (timestampStr) {
+      const tsDate = new Date(timestampStr);
+      if (!isNaN(tsDate.getTime())) {
+        year = tsDate.getFullYear();
+      }
+    }
+    const regex = /(\d+)\s*월\s*(\d+)\s*일/;
+    const match = dateStr.match(regex);
+    if (match) {
+      const month = parseInt(match[1], 10) - 1;
+      const day = parseInt(match[2], 10);
+      return new Date(year, month, day);
+    }
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+    return null;
+  };
+
+  const isDateInPeriod = (dateObj) => {
+    if (!dateObj) return false;
+    const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    
+    if (periodType === 'day') {
+      const target = new Date(selectedDay + 'T00:00:00');
+      return d.getFullYear() === target.getFullYear() &&
+             d.getMonth() === target.getMonth() &&
+             d.getDate() === target.getDate();
+    }
+    
+    if (periodType === 'week') {
+      const [yrStr, wkStr] = selectedWeek.split('-W');
+      const year = parseInt(yrStr, 10);
+      const week = parseInt(wkStr, 10);
+      const simple = new Date(year, 0, 1 + (week - 1) * 7);
+      const dow = simple.getDay();
+      const ISOweekStart = simple;
+      if (dow <= 4) {
+        ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+      } else {
+        ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+      }
+      const ISOweekEnd = new Date(ISOweekStart);
+      ISOweekEnd.setDate(ISOweekStart.getDate() + 6);
+      return d >= ISOweekStart && d <= ISOweekEnd;
+    }
+    
+    if (periodType === 'month') {
+      const [yrStr, moStr] = selectedMonth.split('-');
+      const year = parseInt(yrStr, 10);
+      const month = parseInt(moStr, 10) - 1;
+      return d.getFullYear() === year && d.getMonth() === month;
+    }
+    
+    if (periodType === 'quarter') {
+      const q = parseInt(selectedQuarter, 10);
+      const y = parseInt(selectedYear, 10);
+      const startMonth = (q - 1) * 3;
+      const endMonth = q * 3 - 1;
+      return d.getFullYear() === y && d.getMonth() >= startMonth && d.getMonth() <= endMonth;
+    }
+    
+    return false;
+  };
+
+  const getPeriodLabel = () => {
+    if (periodType === 'day') {
+      const d = new Date(selectedDay + 'T00:00:00');
+      return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+    }
+    if (periodType === 'week') {
+      const [yrStr, wkStr] = selectedWeek.split('-W');
+      const year = parseInt(yrStr, 10);
+      const week = parseInt(wkStr, 10);
+      const simple = new Date(year, 0, 1 + (week - 1) * 7);
+      const dow = simple.getDay();
+      const ISOweekStart = simple;
+      if (dow <= 4) {
+        ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+      } else {
+        ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+      }
+      const ISOweekEnd = new Date(ISOweekStart);
+      ISOweekEnd.setDate(ISOweekStart.getDate() + 6);
+      const startStr = ISOweekStart.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+      const endStr = ISOweekEnd.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+      return `${year}년 ${week}주차 (${startStr} ~ ${endStr})`;
+    }
+    if (periodType === 'month') {
+      const [yrStr, moStr] = selectedMonth.split('-');
+      return `${yrStr}년 ${parseInt(moStr, 10)}월`;
+    }
+    if (periodType === 'quarter') {
+      return `${selectedYear}년 ${selectedQuarter}분기 (${(selectedQuarter - 1) * 3 + 1}월 ~ ${selectedQuarter * 3}월)`;
+    }
+    return '';
+  };
+
+  const getReportRows = () => {
+    const rows = [];
+    const allDateStrs = [...new Set([
+      ...reportRawData.meals.map(m => m.dateStr),
+      ...reportRawData.volunteers.map(v => v.dateStr)
+    ])];
+    
+    const activeDates = allDateStrs.filter(dateStr => {
+      const parsed = parseKoreanDate(dateStr);
+      return isDateInPeriod(parsed);
+    });
+    
+    activeDates.sort((a, b) => {
+      const da = parseKoreanDate(a);
+      const db = parseKoreanDate(b);
+      if (!da || !db) return 0;
+      return da.getTime() - db.getTime();
+    });
+    
+    activeDates.forEach(dateStr => {
+      const mealsForDate = reportRawData.meals.filter(m => m.dateStr === dateStr);
+      const mealStatusMap = {};
+      mealsForDate.forEach(m => {
+        mealStatusMap[`${m.name}_${m.team}`] = m.status;
+      });
+      
+      const volunteersForDate = reportRawData.volunteers.filter(v => v.dateStr === dateStr);
+      
+      // A. Employees
+      reportRawData.users.forEach(u => {
+        const status = mealStatusMap[`${u.name}_${u.team}`] || 'none';
+        let statusText = '미정/미체크';
+        if (status === 'meal') statusText = '식사';
+        else if (status === 'no-meal') statusText = '미식사';
+        
+        if (outputType === 'mealsOnly' && status !== 'meal') {
+          return;
+        }
+        
+        if (selectedTeam !== 'all' && u.team !== selectedTeam) {
+          return;
+        }
+        
+        if (searchQuery) {
+          const matchName = u.name.toLowerCase().includes(searchQuery.toLowerCase());
+          const matchTeam = u.team.toLowerCase().includes(searchQuery.toLowerCase());
+          if (!matchName && !matchTeam) {
+            return;
+          }
+        }
+        
+        rows.push({
+          dateStr,
+          type: '직원',
+          name: u.name,
+          team: u.team,
+          volunteerName: '-',
+          count: status === 'meal' ? 1 : 0,
+          statusText,
+          status,
+          remarks: '-'
+        });
+      });
+      
+      // B. Volunteers
+      volunteersForDate.forEach(v => {
+        if (outputType === 'mealsOnly' && v.count <= 0) {
+          return;
+        }
+        
+        const recorderUser = reportRawData.users.find(u => u.name === v.recorder);
+        const recorderTeam = recorderUser ? recorderUser.team : '';
+        
+        if (selectedTeam !== 'all' && recorderTeam !== selectedTeam) {
+          return;
+        }
+        
+        if (searchQuery) {
+          const matchVolName = v.volunteerName.toLowerCase().includes(searchQuery.toLowerCase());
+          const matchRecorder = v.recorder.toLowerCase().includes(searchQuery.toLowerCase());
+          if (!matchVolName && !matchRecorder) {
+            return;
+          }
+        }
+        
+        rows.push({
+          dateStr,
+          type: '자원봉사자',
+          name: '-',
+          team: recorderTeam ? recorderTeam : '-',
+          volunteerName: v.volunteerName,
+          count: v.count,
+          statusText: '식사',
+          status: 'meal',
+          remarks: `등록자: ${v.recorder}`
+        });
+      });
+    });
+    
+    return rows;
+  };
+
+  const exportToCSV = () => {
+    const rows = getReportRows();
+    if (rows.length === 0) {
+      alert('출력할 데이터가 없습니다.');
+      return;
+    }
+    
+    const headers = ['번호', '날짜', '구분', '직원 이름', '소속 팀명', '자원봉사자 이름', '인원', '식사여부', '비고'];
+    
+    const csvContent = rows.map((r, idx) => [
+      idx + 1,
+      r.dateStr,
+      r.type,
+      r.name,
+      r.team,
+      r.volunteerName,
+      r.count,
+      r.statusText,
+      r.remarks
+    ]);
+    
+    const csvString = [headers, ...csvContent]
+      .map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+      
+    const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    
+    const fileName = `식수인원실적_${periodType}_${getPeriodLabel().replace(/[\s()~./]/g, '_')}.csv`;
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   useEffect(() => {
     // Generate next 5 weekdays
     const dates = [];
@@ -78,7 +360,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (activeTab === 'admin' && user?.role === 'admin') {
-      fetchAdminData(adminTargetDate);
+      if (adminSubTab === 'today') {
+        fetchAdminData(adminTargetDate);
+      } else if (adminSubTab === 'report') {
+        fetchReportData();
+      }
     }
     if (activeTab === 'personal') {
       fetchPersonalAlarm();
@@ -86,7 +372,7 @@ export default function Dashboard() {
     if (activeTab === 'volunteer' && user?.role !== 'admin') {
       fetchVolunteers();
     }
-  }, [activeTab, adminTargetDate]);
+  }, [activeTab, adminTargetDate, adminSubTab]);
 
   const fetchVolunteers = async () => {
     setLoading(true);
@@ -661,178 +947,470 @@ export default function Dashboard() {
 
         {activeTab === 'admin' && user?.role === 'admin' && (
           <div className="glass-card" style={{ padding: '32px', gridColumn: '1 / -1' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                <Utensils size={20} className="text-primary" />
-                오늘의 식수 현황 (관리자)
-              </h2>
+            {/* Admin Sub-Tabs */}
+            <div className="tabs sub-tabs no-print" style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #E5E7EB', marginBottom: '24px' }}>
               <button 
-                className="btn btn-outline" 
-                onClick={() => setShowPasswordChange(!showPasswordChange)}
-                style={{ padding: '6px 12px', fontSize: '14px' }}
+                className={`tab ${adminSubTab === 'today' ? 'active' : ''}`}
+                onClick={() => setAdminSubTab('today')}
+                style={{ fontSize: '14px', padding: '8px 4px' }}
               >
-                비밀번호 변경
+                오늘의 현황
+              </button>
+              <button 
+                className={`tab ${adminSubTab === 'report' ? 'active' : ''}`}
+                onClick={() => setAdminSubTab('report')}
+                style={{ fontSize: '14px', padding: '8px 4px' }}
+              >
+                식수 실적 조회 및 출력
               </button>
             </div>
-            
-            {showPasswordChange && (
-              <div style={{ backgroundColor: '#F9FAFB', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid #E5E7EB' }}>
-                <h3 style={{ fontSize: '16px', marginBottom: '16px' }}>관리자 비밀번호 변경</h3>
-                <form onSubmit={handleAdminPasswordChange} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
-                  <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
-                    <label className="label">현재 비밀번호</label>
-                    <input 
-                      type="password" 
-                      className="input-field" 
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
-                    <label className="label">새 비밀번호</label>
-                    <input 
-                      type="password" 
-                      className="input-field" 
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <button type="submit" className="btn btn-primary" disabled={loading}>
-                    {loading ? '변경 중...' : '변경 저장'}
+
+            {adminSubTab === 'today' && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                  <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                    <Utensils size={20} className="text-primary" />
+                    오늘의 식수 현황 (관리자)
+                  </h2>
+                  <button 
+                    className="btn btn-outline" 
+                    onClick={() => setShowPasswordChange(!showPasswordChange)}
+                    style={{ padding: '6px 12px', fontSize: '14px' }}
+                  >
+                    비밀번호 변경
                   </button>
-                </form>
+                </div>
+                
+                {showPasswordChange && (
+                  <div style={{ backgroundColor: '#F9FAFB', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid #E5E7EB' }}>
+                    <h3 style={{ fontSize: '16px', marginBottom: '16px' }}>관리자 비밀번호 변경</h3>
+                    <form onSubmit={handleAdminPasswordChange} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
+                      <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                        <label className="label">현재 비밀번호</label>
+                        <input 
+                          type="password" 
+                          className="input-field" 
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                        <label className="label">새 비밀번호</label>
+                        <input 
+                          type="password" 
+                          className="input-field" 
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary" disabled={loading}>
+                        {loading ? '변경 중...' : '변경 저장'}
+                      </button>
+                    </form>
+                  </div>
+                )}
+                
+                {adminLoading && !adminData ? (
+                  <p>데이터를 불러오는 중입니다...</p>
+                ) : adminData ? (
+                  <>
+                    <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <label htmlFor="adminDateSelect" style={{ fontWeight: '600' }}>조회 일자:</label>
+                      <select 
+                        id="adminDateSelect"
+                        className="input-field"
+                        style={{ width: '200px', margin: 0, padding: '8px' }}
+                        value={adminTargetDate}
+                        onChange={(e) => setAdminTargetDate(e.target.value)}
+                      >
+                        <option value="">오늘 ({new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })})</option>
+                        {[1, 2, 3, 4, 5].map(offset => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + offset);
+                          if (d.getDay() === 0 || d.getDay() === 6) {
+                            d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1));
+                          }
+                          const dateStr = d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
+                          return <option key={offset} value={dateStr}>{dateStr}</option>;
+                        })}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                      <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>식사 인원 (직원)</div>
+                        <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--primary-color)' }}>{adminData.mealCount}명</div>
+                      </div>
+                      <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>미식사 인원</div>
+                        <div style={{ fontSize: '32px', fontWeight: '700', color: '#EF4444' }}>{adminData.noMealCount}명</div>
+                      </div>
+                      <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>미정 인원</div>
+                        <div style={{ fontSize: '32px', fontWeight: '700', color: '#6B7280' }}>{adminData.undecidedCount || 0}명</div>
+                      </div>
+                      <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>자원봉사자 식수</div>
+                        <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--success)' }}>{adminData.volCount}명</div>
+                      </div>
+                      <div style={{ backgroundColor: 'var(--primary-color)', padding: '24px', borderRadius: '16px', textAlign: 'center', color: 'white', boxShadow: '0 10px 20px rgba(74, 96, 225, 0.2)' }}>
+                        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>총 예상 식수</div>
+                        <div style={{ fontSize: '32px', fontWeight: '700' }}>{adminData.mealCount + adminData.volCount}명</div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h3 style={{ fontSize: '18px', margin: 0 }}>미체크 및 미정 직원 목록 ({adminData.uncheckedUsers.length}명)</h3>
+                      <button className="btn btn-outline" onClick={() => fetchAdminData(adminTargetDate)} disabled={adminLoading} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                        {adminLoading ? '새로고침 중...' : '새로고침'}
+                      </button>
+                    </div>
+                    
+                    <p className="text-muted" style={{ marginBottom: '16px' }}>11시 이후 누락된 직원의 식사 여부를 관리자가 직접 수정할 수 있습니다.</p>
+                    
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+                        <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                          <tr>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>소속</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>이름</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>상태</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)' }}>관리자 조치</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {adminData.uncheckedUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>미체크 인원이 없습니다.</td>
+                            </tr>
+                          ) : (
+                            adminData.uncheckedUsers.map((u, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                                <td style={{ padding: '12px 16px' }}>{u.team}</td>
+                                <td style={{ padding: '12px 16px' }}>{u.name}</td>
+                                <td style={{ padding: '12px 16px' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 10px',
+                                    borderRadius: '12px',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    backgroundColor: '#FEE2E2',
+                                    color: '#DC2626'
+                                  }}>
+                                    {u.status}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  <div style={{ display: 'inline-flex', gap: '8px' }}>
+                                    <button 
+                                      className="btn btn-outline" 
+                                      style={{ padding: '6px 12px', fontSize: '12px', borderColor: '#9CA3AF', color: '#6B7280' }}
+                                      onClick={() => handleAdminUpdateMeal(u.name, u.team, 'none')}
+                                      disabled={adminLoading}
+                                    >
+                                      미정
+                                    </button>
+                                    <button 
+                                      className="btn btn-primary" 
+                                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                                      onClick={() => handleAdminUpdateMeal(u.name, u.team, 'meal')}
+                                      disabled={adminLoading}
+                                    >
+                                      식사
+                                    </button>
+                                    <button 
+                                      className="btn btn-outline" 
+                                      style={{ padding: '6px 12px', fontSize: '12px', borderColor: '#EF4444', color: '#EF4444' }}
+                                      onClick={() => handleAdminUpdateMeal(u.name, u.team, 'no-meal')}
+                                      disabled={adminLoading}
+                                    >
+                                      미식사
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : null}
+              </>
+            )}
+
+            {adminSubTab === 'report' && (
+              <div id="print-section">
+                {/* 1. Header (Print visible) */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }} className="report-header">
+                  <div>
+                    <h2 style={{ fontSize: '22px', fontWeight: '700', color: 'var(--primary-color)', margin: 0 }}>
+                      식수 인원 실적 보고서
+                    </h2>
+                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      조회 범위: <strong>{getPeriodLabel()}</strong>
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }} className="no-print">
+                    <button 
+                      className="btn btn-outline" 
+                      onClick={() => fetchReportData()} 
+                      disabled={reportLoading}
+                    >
+                      새로고침
+                    </button>
+                    <button 
+                      className="btn btn-outline" 
+                      onClick={exportToCSV}
+                    >
+                      엑셀 다운로드 (CSV)
+                    </button>
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={() => window.print()}
+                    >
+                      인쇄하기
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Search & Filter Panel (no-print) */}
+                <div className="glass-card no-print" style={{ padding: '20px', marginBottom: '24px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+                    {/* Period Selector */}
+                    <div>
+                      <label className="label">조회 주기</label>
+                      <select 
+                        className="input-field" 
+                        value={periodType} 
+                        onChange={(e) => setPeriodType(e.target.value)}
+                      >
+                        <option value="day">일 단위</option>
+                        <option value="week">주 단위</option>
+                        <option value="month">월 단위</option>
+                        <option value="quarter">분기별</option>
+                      </select>
+                    </div>
+
+                    {/* Date Input dynamically changes by periodType */}
+                    <div>
+                      <label className="label">날짜 선택</label>
+                      {periodType === 'day' && (
+                        <input 
+                          type="date" 
+                          className="input-field" 
+                          value={selectedDay} 
+                          onChange={(e) => setSelectedDay(e.target.value)} 
+                        />
+                      )}
+                      {periodType === 'week' && (
+                        <input 
+                          type="week" 
+                          className="input-field" 
+                          value={selectedWeek} 
+                          onChange={(e) => setSelectedWeek(e.target.value)} 
+                        />
+                      )}
+                      {periodType === 'month' && (
+                        <input 
+                          type="month" 
+                          className="input-field" 
+                          value={selectedMonth} 
+                          onChange={(e) => setSelectedMonth(e.target.value)} 
+                        />
+                      )}
+                      {periodType === 'quarter' && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <select 
+                            className="input-field" 
+                            value={selectedYear} 
+                            onChange={(e) => setSelectedYear(Number(e.target.value))} 
+                            style={{ flex: 1 }}
+                          >
+                            {[2025, 2026, 2027, 2028].map(yr => (
+                              <option key={yr} value={yr}>{yr}년</option>
+                            ))}
+                          </select>
+                          <select 
+                            className="input-field" 
+                            value={selectedQuarter} 
+                            onChange={(e) => setSelectedQuarter(Number(e.target.value))} 
+                            style={{ flex: 1 }}
+                          >
+                            <option value="1">1분기</option>
+                            <option value="2">2분기</option>
+                            <option value="3">3분기</option>
+                            <option value="4">4분기</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Output Format (Meal taker filter) */}
+                    <div>
+                      <label className="label">출력 대상 양식</label>
+                      <select 
+                        className="input-field" 
+                        value={outputType} 
+                        onChange={(e) => setOutputType(e.target.value)}
+                      >
+                        <option value="mealsOnly">식사 인원만 출력 (직원+자원봉사자)</option>
+                        <option value="all">식사 및 미식사 전체 출력</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                    {/* Team Filter */}
+                    <div>
+                      <label className="label">소속 팀 필터</label>
+                      <select 
+                        className="input-field" 
+                        value={selectedTeam} 
+                        onChange={(e) => setSelectedTeam(e.target.value)}
+                      >
+                        <option value="all">전체 소속</option>
+                        {[...new Set(reportRawData.users.map(u => u.team).filter(Boolean))].map(team => (
+                          <option key={team} value={team}>{team}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Text Search */}
+                    <div>
+                      <label className="label">이름 검색</label>
+                      <input 
+                        type="text" 
+                        className="input-field" 
+                        placeholder="이름 또는 소속팀 검색..." 
+                        value={searchQuery} 
+                        onChange={(e) => setSearchQuery(e.target.value)} 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Summary Statistics Cards */}
+                {reportLoading ? (
+                  <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                    <div className="loader" style={{ marginBottom: '12px' }}></div>
+                    <p className="text-muted">실적 데이터를 분석하고 집계하는 중입니다...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px', marginBottom: '24px' }} className="report-summary-cards">
+                      <div style={{ backgroundColor: '#EFF6FF', padding: '16px', borderRadius: '12px', textAlign: 'center', border: '1px solid #BFDBFE' }}>
+                        <div style={{ fontSize: '12px', color: '#1E40AF', fontWeight: '600', marginBottom: '4px' }}>총 식사 인원</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#1D4ED8' }}>
+                          {getReportRows().reduce((sum, r) => sum + (r.status === 'meal' ? r.count : 0), 0)}명
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#F0FDF4', padding: '16px', borderRadius: '12px', textAlign: 'center', border: '1px solid #BBF7D0' }}>
+                        <div style={{ fontSize: '12px', color: '#166534', fontWeight: '600', marginBottom: '4px' }}>직원 식사</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#15803D' }}>
+                          {getReportRows().filter(r => r.type === '직원' && r.status === 'meal').length}명
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#ECFDF5', padding: '16px', borderRadius: '12px', textAlign: 'center', border: '1px solid #A7F3D0' }}>
+                        <div style={{ fontSize: '12px', color: '#065F46', fontWeight: '600', marginBottom: '4px' }}>자원봉사자 식수</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#047857' }}>
+                          {getReportRows().filter(r => r.type === '자원봉사자').reduce((sum, r) => sum + r.count, 0)}명
+                        </div>
+                      </div>
+                      {outputType === 'all' && (
+                        <>
+                          <div style={{ backgroundColor: '#FEF2F2', padding: '16px', borderRadius: '12px', textAlign: 'center', border: '1px solid #FECACA' }}>
+                            <div style={{ fontSize: '12px', color: '#991B1B', fontWeight: '600', marginBottom: '4px' }}>미식사 직원</div>
+                            <div style={{ fontSize: '24px', fontWeight: '700', color: '#DC2626' }}>
+                              {getReportRows().filter(r => r.type === '직원' && r.status === 'no-meal').length}명
+                            </div>
+                          </div>
+                          <div style={{ backgroundColor: '#F9FAFB', padding: '16px', borderRadius: '12px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                            <div style={{ fontSize: '12px', color: '#374151', fontWeight: '600', marginBottom: '4px' }}>미정/미체크</div>
+                            <div style={{ fontSize: '24px', fontWeight: '700', color: '#4B5563' }}>
+                              {getReportRows().filter(r => r.type === '직원' && r.status === 'none').length}명
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* 4. Detailed Table */}
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }} className="report-table">
+                        <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
+                          <tr>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)', width: '60px' }}>번호</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)', width: '120px' }}>날짜</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)', width: '100px' }}>구분</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)', width: '120px' }}>이름</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)', width: '130px' }}>소속 팀명</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)', width: '160px' }}>자원봉사자 이름</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)', width: '80px' }}>인원</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)', width: '100px' }}>식사여부</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>비고</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getReportRows().length === 0 ? (
+                            <tr>
+                              <td colSpan="9" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                조건에 부합하는 식수 인원 실적 기록이 없습니다.
+                              </td>
+                            </tr>
+                          ) : (
+                            getReportRows().map((row, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>{idx + 1}</td>
+                                <td style={{ padding: '12px 16px' }}>{row.dateStr}</td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    backgroundColor: row.type === '직원' ? '#E0E7FF' : '#D1FAE5',
+                                    color: row.type === '직원' ? '#3730A3' : '#065F46'
+                                  }}>
+                                    {row.type}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 16px', fontWeight: row.type === '직원' ? '600' : '400' }}>{row.name}</td>
+                                <td style={{ padding: '12px 16px' }}>{row.team}</td>
+                                <td style={{ padding: '12px 16px', color: row.type === '자원봉사자' ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                                  {row.volunteerName}
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700' }}>
+                                  {row.count > 0 ? `${row.count}명` : '-'}
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    backgroundColor: row.status === 'meal' ? '#D1FAE5' : row.status === 'no-meal' ? '#FEE2E2' : '#F3F4F6',
+                                    color: row.status === 'meal' ? '#065F46' : row.status === 'no-meal' ? '#991B1B' : '#374151'
+                                  }}>
+                                    {row.statusText}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--text-muted)' }}>{row.remarks}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
             )}
-            
-            {adminLoading && !adminData ? (
-              <p>데이터를 불러오는 중입니다...</p>
-            ) : adminData ? (
-              <>
-                <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <label htmlFor="adminDateSelect" style={{ fontWeight: '600' }}>조회 일자:</label>
-                  <select 
-                    id="adminDateSelect"
-                    className="input-field"
-                    style={{ width: '200px', margin: 0, padding: '8px' }}
-                    value={adminTargetDate}
-                    onChange={(e) => setAdminTargetDate(e.target.value)}
-                  >
-                    <option value="">오늘 ({new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })})</option>
-                    {[1, 2, 3, 4, 5].map(offset => {
-                      const d = new Date();
-                      d.setDate(d.getDate() + offset);
-                      if (d.getDay() === 0 || d.getDay() === 6) {
-                        d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1));
-                      }
-                      const dateStr = d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
-                      return <option key={offset} value={dateStr}>{dateStr}</option>;
-                    })}
-                  </select>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
-                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>식사 인원 (직원)</div>
-                    <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--primary-color)' }}>{adminData.mealCount}명</div>
-                  </div>
-                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
-                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>미식사 인원</div>
-                    <div style={{ fontSize: '32px', fontWeight: '700', color: '#EF4444' }}>{adminData.noMealCount}명</div>
-                  </div>
-                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
-                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>미정 인원</div>
-                    <div style={{ fontSize: '32px', fontWeight: '700', color: '#6B7280' }}>{adminData.undecidedCount || 0}명</div>
-                  </div>
-                  <div style={{ backgroundColor: 'rgba(255,255,255,0.8)', padding: '24px', borderRadius: '16px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
-                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>자원봉사자 식수</div>
-                    <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--success)' }}>{adminData.volCount}명</div>
-                  </div>
-                  <div style={{ backgroundColor: 'var(--primary-color)', padding: '24px', borderRadius: '16px', textAlign: 'center', color: 'white', boxShadow: '0 10px 20px rgba(74, 96, 225, 0.2)' }}>
-                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>총 예상 식수</div>
-                    <div style={{ fontSize: '32px', fontWeight: '700' }}>{adminData.mealCount + adminData.volCount}명</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ fontSize: '18px', margin: 0 }}>미체크 및 미정 직원 목록 ({adminData.uncheckedUsers.length}명)</h3>
-                  <button className="btn btn-outline" onClick={() => fetchAdminData(adminTargetDate)} disabled={adminLoading} style={{ padding: '6px 12px', fontSize: '12px' }}>
-                    {adminLoading ? '새로고침 중...' : '새로고침'}
-                  </button>
-                </div>
-                
-                <p className="text-muted" style={{ marginBottom: '16px' }}>11시 이후 누락된 직원의 식사 여부를 관리자가 직접 수정할 수 있습니다.</p>
-                
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
-                    <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-                      <tr>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>소속</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>이름</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--text-muted)' }}>상태</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)' }}>관리자 조치</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {adminData.uncheckedUsers.length === 0 ? (
-                        <tr>
-                          <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>미체크 인원이 없습니다.</td>
-                        </tr>
-                      ) : (
-                        adminData.uncheckedUsers.map((u, i) => (
-                          <tr key={i} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                            <td style={{ padding: '12px 16px' }}>{u.team}</td>
-                            <td style={{ padding: '12px 16px' }}>{u.name}</td>
-                            <td style={{ padding: '12px 16px' }}>
-                              <span style={{
-                                display: 'inline-block',
-                                padding: '2px 10px',
-                                borderRadius: '12px',
-                                fontSize: '13px',
-                                fontWeight: '600',
-                                backgroundColor: '#FEE2E2',
-                                color: '#DC2626'
-                              }}>
-                                {u.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                              <div style={{ display: 'inline-flex', gap: '8px' }}>
-                                <button 
-                                  className="btn btn-outline" 
-                                  style={{ padding: '6px 12px', fontSize: '12px', borderColor: '#9CA3AF', color: '#6B7280' }}
-                                  onClick={() => handleAdminUpdateMeal(u.name, u.team, 'none')}
-                                  disabled={adminLoading}
-                                >
-                                  미정
-                                </button>
-                                <button 
-                                  className="btn btn-primary" 
-                                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                                  onClick={() => handleAdminUpdateMeal(u.name, u.team, 'meal')}
-                                  disabled={adminLoading}
-                                >
-                                  식사
-                                </button>
-                                <button 
-                                  className="btn btn-outline" 
-                                  style={{ padding: '6px 12px', fontSize: '12px', borderColor: '#EF4444', color: '#EF4444' }}
-                                  onClick={() => handleAdminUpdateMeal(u.name, u.team, 'no-meal')}
-                                  disabled={adminLoading}
-                                >
-                                  미식사
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            ) : null}
           </div>
         )}
       </div>
