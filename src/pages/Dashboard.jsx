@@ -88,6 +88,15 @@ export default function Dashboard() {
     
     const str = dateStr.toString().trim();
     
+    // 만약 표준 ISO 날짜 형식이거나 T/Z/GMT를 포함하는 시간 문자열이라면
+    // 정규식 가로채기 전에 Native Date 생성자로 타임존을 포함해 가장 정확하게 로컬로 해석
+    if (str.includes('T') || str.includes('GMT') || /^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const nativeParsed = new Date(str);
+      if (!isNaN(nativeParsed.getTime())) {
+        return nativeParsed;
+      }
+    }
+    
     // 패턴 1: 2026-05-20 또는 2026.05.20 또는 26-05-20 등
     const ymdRegex = /^(\d{4})[-.](\d{1,2})[-.](\d{1,2})/;
     const ymdMatch = str.match(ymdRegex);
