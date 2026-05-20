@@ -99,6 +99,20 @@ export default function Dashboard() {
     return null;
   };
 
+  const areDatesEqual = (dateStrA, dateStrB) => {
+    if (!dateStrA || !dateStrB) return false;
+    if (dateStrA.trim() === dateStrB.trim()) return true;
+    
+    const dateA = parseKoreanDate(dateStrA);
+    const dateB = parseKoreanDate(dateStrB);
+    
+    if (!dateA || !dateB) return false;
+    
+    return dateA.getFullYear() === dateB.getFullYear() &&
+           dateA.getMonth() === dateB.getMonth() &&
+           dateA.getDate() === dateB.getDate();
+  };
+
   const isDateInPeriod = (dateObj) => {
     if (!dateObj) return false;
     const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
@@ -198,13 +212,13 @@ export default function Dashboard() {
     });
     
     activeDates.forEach(dateStr => {
-      const mealsForDate = reportRawData.meals.filter(m => m.dateStr === dateStr);
+      const mealsForDate = reportRawData.meals.filter(m => areDatesEqual(m.dateStr, dateStr));
       const mealStatusMap = {};
       mealsForDate.forEach(m => {
         mealStatusMap[`${m.name}_${m.team}`] = m.status;
       });
       
-      const volunteersForDate = reportRawData.volunteers.filter(v => v.dateStr === dateStr);
+      const volunteersForDate = reportRawData.volunteers.filter(v => areDatesEqual(v.dateStr, dateStr));
       
       // A. Employees
       reportRawData.users.forEach(u => {
