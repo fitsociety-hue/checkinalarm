@@ -85,23 +85,55 @@ export default function Dashboard() {
         year = tsDate.getFullYear();
       }
     }
-    const regex = /(\d+)\s*월\s*(\d+)\s*일/;
-    const match = dateStr.match(regex);
-    if (match) {
-      const month = parseInt(match[1], 10) - 1;
-      const day = parseInt(match[2], 10);
+    
+    const str = dateStr.toString().trim();
+    
+    // 패턴 1: 2026-05-20 또는 2026.05.20 또는 26-05-20 등
+    const ymdRegex = /^(\d{4})[-.](\d{1,2})[-.](\d{1,2})/;
+    const ymdMatch = str.match(ymdRegex);
+    if (ymdMatch) {
+      return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10));
+    }
+    
+    // 패턴 2: M월 d일 (요일) 또는 M월 d일 요일 등
+    const mdKoreanRegex = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/;
+    const mdKoreanMatch = str.match(mdKoreanRegex);
+    if (mdKoreanMatch) {
+      const month = parseInt(mdKoreanMatch[1], 10) - 1;
+      const day = parseInt(mdKoreanMatch[2], 10);
       return new Date(year, month, day);
     }
-    const parsed = new Date(dateStr);
+    
+    // 패턴 3: M. d. (요일) 또는 M. d. 요일 또는 M. d.
+    const mdDotRegex = /(\d{1,2})\s*\.\s*(\d{1,2})\s*\.?/;
+    const mdDotMatch = str.match(mdDotRegex);
+    if (mdDotMatch) {
+      const month = parseInt(mdDotMatch[1], 10) - 1;
+      const day = parseInt(mdDotMatch[2], 10);
+      return new Date(year, month, day);
+    }
+    
+    // 패턴 4: Native JS Date parsing fallback
+    const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) {
       return parsed;
     }
+    
     return null;
+  };
+
+  const formatDateToStandard = (dateObj) => {
+    if (!dateObj) return '';
+    const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+    const month = dateObj.getMonth() + 1;
+    const date = dateObj.getDate();
+    const dayOfWeek = weekdays[dateObj.getDay()];
+    return `${month}월 ${date}일 (${dayOfWeek})`;
   };
 
   const areDatesEqual = (dateStrA, dateStrB) => {
     if (!dateStrA || !dateStrB) return false;
-    if (dateStrA.trim() === dateStrB.trim()) return true;
+    if (dateStrA.toString().trim() === dateStrB.toString().trim()) return true;
     
     const dateA = parseKoreanDate(dateStrA);
     const dateB = parseKoreanDate(dateStrB);
@@ -195,9 +227,9 @@ export default function Dashboard() {
   const getReportRows = () => {
     const rows = [];
     const allDateStrs = [...new Set([
-      ...reportRawData.meals.map(m => m.dateStr),
-      ...reportRawData.volunteers.map(v => v.dateStr)
-    ])];
+      ...reportRawData.meals.map(m => formatDateToStandard(parseKoreanDate(m.dateStr))),
+      ...reportRawData.volunteers.map(v => formatDateToStandard(parseKoreanDate(v.dateStr)))
+    ])].filter(Boolean);
     
     const activeDates = allDateStrs.filter(dateStr => {
       const parsed = parseKoreanDate(dateStr);
@@ -212,13 +244,19 @@ export default function Dashboard() {
     });
     
     activeDates.forEach(dateStr => {
-      const mealsForDate = reportRawData.meals.filter(m => areDatesEqual(m.dateStr, dateStr));
+      const mealsForDate = reportRawData.meals.filter(m => {
+        const std = formatDateToStandard(parseKoreanDate(m.dateStr));
+        return std === dateStr;
+      });
       const mealStatusMap = {};
       mealsForDate.forEach(m => {
         mealStatusMap[`${m.name}_${m.team}`] = m.status;
       });
       
-      const volunteersForDate = reportRawData.volunteers.filter(v => areDatesEqual(v.dateStr, dateStr));
+      const volunteersForDate = reportRawData.volunteers.filter(v => {
+        const std = formatDateToStandard(parseKoreanDate(v.dateStr));
+        return std === dateStr;
+      });
       
       // A. Employees
       reportRawData.users.forEach(u => {

@@ -639,10 +639,15 @@ function normalizeDateStr(dateVal) {
     return formatToKoreanDate(dateVal);
   }
   const dateStr = dateVal.toString().trim();
-  if (dateStr.includes('(') && dateStr.includes(')')) {
+  
+  // 이미 완벽한 한국어 "M월 d일 (요일)" 형태라면 그대로 반환
+  const targetKoreanRegex = /^\d{1,2}월\s*\d{1,2}일\s*\([일월화수목금토]\)$/;
+  if (targetKoreanRegex.test(dateStr)) {
     return dateStr;
   }
-  const regex = /^(\d{4})-(\d{2})-(\d{2})/;
+  
+  // 1. yyyy-MM-dd 형태
+  const regex = /^(\d{4})[-.](\d{2})[-.](\d{2})/;
   const match = dateStr.match(regex);
   if (match) {
     const year = parseInt(match[1]);
@@ -651,6 +656,29 @@ function normalizeDateStr(dateVal) {
     const d = new Date(year, month, day);
     return formatToKoreanDate(d);
   }
+  
+  // 2. M. d. (요일) 또는 M. d. 형태 파싱
+  const dotRegex = /(\d{1,2})\s*\.\s*(\d{1,2})\s*\.?/;
+  const dotMatch = dateStr.match(dotRegex);
+  if (dotMatch) {
+    const year = new Date().getFullYear();
+    const month = parseInt(dotMatch[1]) - 1;
+    const day = parseInt(dotMatch[2]);
+    const d = new Date(year, month, day);
+    return formatToKoreanDate(d);
+  }
+  
+  // 3. M월 d일 형태 파싱
+  const korRegex = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/;
+  const korMatch = dateStr.match(korRegex);
+  if (korMatch) {
+    const year = new Date().getFullYear();
+    const month = parseInt(korMatch[1]) - 1;
+    const day = parseInt(korMatch[2]);
+    const d = new Date(year, month, day);
+    return formatToKoreanDate(d);
+  }
+
   try {
     const parsed = new Date(dateStr);
     if (!isNaN(parsed.getTime())) {
