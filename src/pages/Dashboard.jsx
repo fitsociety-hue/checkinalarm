@@ -38,25 +38,41 @@ export default function Dashboard() {
 
   const [adminSubTab, setAdminSubTab] = useState('today'); // 'today' | 'report'
   
+  // KST (Korea Standard Time) Date Helpers
+  const getKSTDateString = (date = new Date()) => {
+    return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date);
+  };
+
+  const getKSTMonth = (date = new Date()) => {
+    return parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', month: 'numeric' }).format(date), 10);
+  };
+
   // Report states
   const [reportRawData, setReportRawData] = useState({ users: [], meals: [], volunteers: [] });
   const [reportLoading, setReportLoading] = useState(false);
   const [periodType, setPeriodType] = useState('day'); // 'day', 'week', 'month', 'quarter'
-  const [selectedDay, setSelectedDay] = useState(new Date().toISOString().split('T')[0]); // yyyy-MM-dd
+  const [selectedDay, setSelectedDay] = useState(getKSTDateString()); // yyyy-MM-dd
   
   const getCurrentWeekString = (date = new Date()) => {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+    const kstStr = getKSTDateString(date);
+    const parts = kstStr.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const localD = new Date(y, m, d);
+    
+    const utcVal = new Date(Date.UTC(localD.getFullYear(), localD.getMonth(), localD.getDate()));
+    const dayNum = utcVal.getUTCDay() || 7;
+    utcVal.setUTCDate(utcVal.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(utcVal.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((utcVal - yearStart) / 86400000) + 1) / 7);
+    return `${utcVal.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
   };
   
   const [selectedWeek, setSelectedWeek] = useState(getCurrentWeekString());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedQuarter, setSelectedQuarter] = useState(Math.ceil((new Date().getMonth() + 1) / 3));
+  const [selectedMonth, setSelectedMonth] = useState(getKSTDateString().slice(0, 7));
+  const [selectedYear, setSelectedYear] = useState(parseInt(getKSTDateString().slice(0, 4), 10));
+  const [selectedQuarter, setSelectedQuarter] = useState(Math.ceil(getKSTMonth() / 3));
   
   const [outputType, setOutputType] = useState('mealsOnly'); // 'mealsOnly', 'all'
   const [selectedTeam, setSelectedTeam] = useState('all');
@@ -66,11 +82,21 @@ export default function Dashboard() {
     setReportLoading(true);
     try {
       const result = await fetchGAS('getReportData');
-      if (result.success && result.data) {
+      if (result && result.success && result.data) {
         setReportRawData(result.data);
+      } else {
+        console.error('Failed to fetch report data', result);
+        const errMsg = result?.message || '알 수 없는 서버 오류가 발생했습니다.';
+        
+        if (errMsg.includes('알 수 없는 요청') || errMsg.includes('unknown action') || errMsg.includes('MemeType') || errMsg.includes('MimeType')) {
+          alert('⚠️ [구글 앱스 스크립트 배포 업데이트 필요]\n\n최근 추가된 실적 보고서 전송 기능(getReportData)이 구글 앱스 스크립트 웹앱에 아직 배포 반영되지 않았습니다.\n\n[배포 업데이트 방법]\n1. 구글 스프레드시트의 상단 메뉴에서 [확장 프로그램] > [Apps Script]로 이동합니다.\n2. 우측 상단의 [배포] > [배포 관리]를 클릭합니다.\n3. 목록에서 현재 활성화된 웹앱 배포를 선택하고 우측 상단의 [편집 (연필 모양)] 아이콘을 누릅니다.\n4. 버전 드롭다운을 반드시 **[새 버전]**으로 선택하고 하단 [배포] 버튼을 눌러 업데이트를 저장합니다.\n5. 배포 완료 후 브라우저 창에서 Ctrl + F5를 눌러 강력 새로고침한 뒤 다시 확인해 주세요!');
+        } else {
+          alert(`⚠️ [데이터 연동 실패] 식수 실적 보고서 데이터를 가져오지 못했습니다.\n\n서버 메시지: ${errMsg}`);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch report data', err);
+      alert(`⚠️ [네트워크 오류] 서버와 통신하는 도중 예기치 않은 오류가 발생했습니다.\n\n오류 내용: ${err.message || err.toString()}\n\n구글 앱스 스크립트 설정이나 인터넷 연결 상태를 확인해주세요.`);
     } finally {
       setReportLoading(false);
     }
@@ -89,10 +115,32 @@ export default function Dashboard() {
     const str = dateStr.toString().trim();
     
     // 만약 표준 ISO 날짜 형식이거나 T/Z/GMT를 포함하는 시간 문자열이라면
-    // 정규식 가로채기 전에 Native Date 생성자로 타임존을 포함해 가장 정확하게 로컬로 해석
+    // 정규식 가로채기 전에 Native Date 생성자로 타임존을 포함해 아시아/서울 시간대 기준의 일자로 정확히 디코딩
     if (str.includes('T') || str.includes('GMT') || /^\d{4}-\d{2}-\d{2}$/.test(str)) {
       const nativeParsed = new Date(str);
       if (!isNaN(nativeParsed.getTime())) {
+        try {
+          const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric'
+          });
+          const parts = formatter.formatToParts(nativeParsed);
+          const partValues = {};
+          parts.forEach(p => {
+            partValues[p.type] = p.value;
+          });
+          if (partValues.year && partValues.month && partValues.day) {
+            return new Date(
+              parseInt(partValues.year, 10),
+              parseInt(partValues.month, 10) - 1,
+              parseInt(partValues.day, 10)
+            );
+          }
+        } catch (e) {
+          console.error('Timezone conversion error in parseKoreanDate', e);
+        }
         return nativeParsed;
       }
     }
@@ -159,10 +207,13 @@ export default function Dashboard() {
     const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
     
     if (periodType === 'day') {
-      const target = new Date(selectedDay + 'T00:00:00');
-      return d.getFullYear() === target.getFullYear() &&
-             d.getMonth() === target.getMonth() &&
-             d.getDate() === target.getDate();
+      const parts = selectedDay.split('-');
+      const targetYear = parseInt(parts[0], 10);
+      const targetMonth = parseInt(parts[1], 10) - 1;
+      const targetDay = parseInt(parts[2], 10);
+      return d.getFullYear() === targetYear &&
+             d.getMonth() === targetMonth &&
+             d.getDate() === targetDay;
     }
     
     if (periodType === 'week') {
@@ -202,7 +253,8 @@ export default function Dashboard() {
 
   const getPeriodLabel = () => {
     if (periodType === 'day') {
-      const d = new Date(selectedDay + 'T00:00:00');
+      const parts = selectedDay.split('-');
+      const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
       return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
     }
     if (periodType === 'week') {
@@ -380,9 +432,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    // Generate next 5 weekdays
+    // Generate next 5 weekdays based on KST today
     const dates = [];
-    let curr = new Date();
+    const kstStr = getKSTDateString(); // "yyyy-MM-dd"
+    const parts = kstStr.split('-');
+    let curr = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
     while (dates.length < 5) {
       if (curr.getDay() !== 0 && curr.getDay() !== 6) { // Skip weekends
         dates.push({

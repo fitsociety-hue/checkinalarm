@@ -691,10 +691,23 @@ function normalizeDateStr(dateVal) {
 // Date 객체를 "M월 d일 (요일)" 포맷으로 변환하는 헬퍼
 function formatToKoreanDate(dateObj) {
   const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-  const month = dateObj.getMonth() + 1;
-  const date = dateObj.getDate();
-  const dayOfWeek = weekdays[dateObj.getDay()];
-  return month + "월 " + date + "일 (" + dayOfWeek + ")";
+  try {
+    // Utilities.formatDate를 사용하여 언제나 Asia/Seoul 시간대로 변환
+    const formatted = Utilities.formatDate(dateObj, "Asia/Seoul", "yyyy-MM-dd");
+    const parts = formatted.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+    
+    const dayOfWeekIdx = new Date(year, month - 1, day).getDay();
+    const dayOfWeek = weekdays[dayOfWeekIdx];
+    return month + "월 " + day + "일 (" + dayOfWeek + ")";
+  } catch (e) {
+    const month = dateObj.getMonth() + 1;
+    const date = dateObj.getDate();
+    const dayOfWeek = weekdays[dateObj.getDay()];
+    return month + "월 " + date + "일 (" + dayOfWeek + ")";
+  }
 }
 
 // 공백 제거 및 날짜 형식 표준화 비교 헬퍼
@@ -766,4 +779,3 @@ function handleGetReportData() {
     return { success: false, message: error.toString() };
   }
 }
-
