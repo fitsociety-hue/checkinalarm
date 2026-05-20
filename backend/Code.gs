@@ -703,7 +703,7 @@ function handleGetReportData() {
       const [dateStr, name, team, status, timestamp] = mealsData[i];
       if (dateStr) {
         meals.push({
-          dateStr: dateStr.toString().trim(),
+          dateStr: normalizeDateStr(dateStr),
           name: name.toString().trim(),
           team: team.toString().trim(),
           status: status.toString().trim(),
@@ -717,7 +717,7 @@ function handleGetReportData() {
       const [dateStr, recorder, volunteerName, count, timestamp] = volData[i];
       if (dateStr) {
         volunteers.push({
-          dateStr: dateStr.toString().trim(),
+          dateStr: normalizeDateStr(dateStr),
           recorder: recorder.toString().trim(),
           volunteerName: volunteerName.toString().trim(),
           count: Number(count) || 0,
