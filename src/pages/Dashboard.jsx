@@ -1141,15 +1141,24 @@ export default function Dashboard() {
                         onChange={(e) => setAdminTargetDate(e.target.value)}
                       >
                         <option value="">오늘 ({new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })})</option>
-                        {[1, 2, 3, 4, 5].map(offset => {
-                          const d = new Date();
-                          d.setDate(d.getDate() + offset);
-                          if (d.getDay() === 0 || d.getDay() === 6) {
-                            d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1));
+                        {(() => {
+                          const options = [];
+                          const kstStr = getKSTDateString();
+                          const parts = kstStr.split('-');
+                          let curr = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                          while (options.length < 5) {
+                            curr.setDate(curr.getDate() + 1);
+                            if (curr.getDay() !== 0 && curr.getDay() !== 6) {
+                              const dateStr = curr.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
+                              options.push(
+                                <option key={options.length} value={dateStr}>
+                                  {dateStr}
+                                </option>
+                              );
+                            }
                           }
-                          const dateStr = d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
-                          return <option key={offset} value={dateStr}>{dateStr}</option>;
-                        })}
+                          return options;
+                        })()}
                       </select>
                     </div>
 
