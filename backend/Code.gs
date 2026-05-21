@@ -165,9 +165,68 @@ function doPost(e) {
 // 핸들러 함수들
 // ==========================================
 
+// PIN 비밀번호를 SHA-256 문자열로 해싱하는 헬퍼 함수
+function hashPin(pin) {
+  if (!pin && pin !== 0) return "";
+  const rawHash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, pin.toString().trim(), Utilities.Charset.UTF_8);
+  let hashStr = "";
+  for (let i = 0; i < rawHash.length; i++) {
+    let byteVal = rawHash[i];
+    if (byteVal < 0) byteVal += 256;
+    let byteString = byteVal.toString(16);
+    if (byteString.length === 1) byteString = "0" + byteString;
+    hashStr += byteString;
+  }
+  return hashStr;
+}
+
+// 기존 평문(숫자) 비밀번호를 찾아 안전한 SHA-256 해시로 변환하는 마이그레이션 함수
+function migrateAllUsersToHashedPins() {
+  const sheet = getSheet('Users');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return; // 헤더만 있거나 데이터가 없음
+  
+  const range = sheet.getRange(2, 1, lastRow - 1, 4); // 이름, 소속, 비밀번호, 권한
+  const values = range.getValues();
+  let updated = false;
+  
+  for (let i = 0; i < values.length; i++) {
+    let pinVal = values[i][2]; // 비밀번호 컬럼
+    if (!pinVal && pinVal !== 0) continue;
+    
+    let pinStr = pinVal.toString().trim();
+    
+    // 64자리 16진수 문자열(SHA-256)인지 확인. 아니면 기존 평문 데이터로 취급하여 마이그레이션
+    const isSha256 = /^[a-fA-F0-9]{64}$/.test(pinStr);
+    if (!isSha256) {
+      // 4자리 숫자로 맞추기 위해 패딩 처리 (예: "926" -> "0926")
+      if (pinStr.length < 4 && /^\d+$/.test(pinStr)) {
+        pinStr = pinStr.padStart(4, '0');
+      }
+      const hashed = hashPin(pinStr);
+      sheet.getRange(i + 2, 3).setValue(hashed); // 2번째 행부터 시작
+      updated = true;
+    }
+  }
+  if (updated) {
+    SpreadsheetApp.flush();
+  }
+}
+
 // 1. 일반 직원 로그인 처리
 function handleLogin(params) {
   const { name, team, pin } = params;
+  
+  // 마이그레이션 우선 실행 (기존 평문 사용자 정보 해싱)
+  migrateAllUsersToHashedPins();
+  
+  // 입력 PIN 자릿수 보정 및 공백 제거
+  let cleanPin = pin ? pin.toString().trim() : "";
+  if (cleanPin.length < 4 && /^\d+$/.test(cleanPin)) {
+    cleanPin = cleanPin.padStart(4, '0');
+  }
+  const hashedPin = hashPin(cleanPin);
+  
   const sheet = getSheet('Users');
   const data = sheet.getDataRange().getValues();
   
@@ -175,7 +234,7 @@ function handleLogin(params) {
   for (let i = 1; i < data.length; i++) {
     const [sName, sTeam, sPin, sRole] = data[i];
     if (sName === name && sTeam === team) {
-      if (sPin.toString() === pin.toString()) {
+      if (sPin.toString() === hashedPin) {
         // 기존 직원이 관리자 권한을 가졌더라도 일반 탭으로 로그인하면 employee로 취급하거나
         // 관리자 전용 대시보드가 분리되었으므로, 직원 대시보드만 보게 됩니다.
         return { success: true, role: 'employee' };
@@ -185,8 +244,8 @@ function handleLogin(params) {
     }
   }
   
-  // 등록된 정보가 없으면 신규 회원가입 처리
-  sheet.appendRow([name, team, pin, 'employee']);
+  // 등록된 정보가 없으면 신규 회원가입 처리 (비밀번호를 해시로 변환하여 기록)
+  sheet.appendRow([name, team, hashedPin, 'employee']);
   return { success: true, role: 'employee', message: '직원 등록이 완료되었습니다.' };
 }
 
