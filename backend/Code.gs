@@ -52,6 +52,8 @@ function doGet(e) {
 
     if (action === 'login') {
       result = handleLogin(params);
+    } else if (action === 'signup') {
+      result = handleSignup(params);
     } else if (action === 'saveConfig') {
       result = handleSaveConfig(params);
     } else if (action === 'saveMeals') {
@@ -118,6 +120,8 @@ function doPost(e) {
 
     if (action === 'login') {
       result = handleLogin(data);
+    } else if (action === 'signup') {
+      result = handleSignup(data);
     } else if (action === 'saveConfig') {
       result = handleSaveConfig(data);
     } else if (action === 'saveMeals') {
@@ -230,10 +234,13 @@ function handleLogin(params) {
   const sheet = getSheet('Users');
   const data = sheet.getDataRange().getValues();
   
+  const cleanName = name ? name.toString().trim() : "";
+  const cleanTeam = team ? team.toString().trim() : "";
+  
   // 첫 행은 헤더이므로 제외하고 검색
   for (let i = 1; i < data.length; i++) {
     const [sName, sTeam, sPin, sRole] = data[i];
-    if (sName === name && sTeam === team) {
+    if (sName.toString().trim() === cleanName && sTeam.toString().trim() === cleanTeam) {
       if (sPin.toString() === hashedPin) {
         // 기존 직원이 관리자 권한을 가졌더라도 일반 탭으로 로그인하면 employee로 취급하거나
         // 관리자 전용 대시보드가 분리되었으므로, 직원 대시보드만 보게 됩니다.
@@ -244,9 +251,45 @@ function handleLogin(params) {
     }
   }
   
-  // 등록된 정보가 없으면 신규 회원가입 처리 (비밀번호를 해시로 변환하여 기록)
-  sheet.appendRow([name, team, hashedPin, 'employee']);
-  return { success: true, role: 'employee', message: '직원 등록이 완료되었습니다.' };
+  // 등록된 정보가 없으면 에러 반전 (자동 가입하지 않음)
+  return { success: false, message: '등록된 직원 정보가 없습니다. 회원가입을 먼저 진행해 주세요.' };
+}
+
+// 1-2. 일반 직원 회원가입 처리
+function handleSignup(params) {
+  const { name, team, pin } = params;
+  
+  // 마이그레이션 우선 실행 (기존 평문 사용자 정보 해싱)
+  migrateAllUsersToHashedPins();
+  
+  const cleanName = name ? name.toString().trim() : "";
+  const cleanTeam = team ? team.toString().trim() : "";
+  
+  if (!cleanName || !cleanTeam || !pin || pin.toString().trim().length !== 4) {
+    return { success: false, message: '이름, 소속 팀명, 4자리 비밀번호를 정확히 입력해주세요.' };
+  }
+  
+  // 입력 PIN 자릿수 보정 및 공백 제거
+  let cleanPin = pin ? pin.toString().trim() : "";
+  if (cleanPin.length < 4 && /^\d+$/.test(cleanPin)) {
+    cleanPin = cleanPin.padStart(4, '0');
+  }
+  const hashedPin = hashPin(cleanPin);
+  
+  const sheet = getSheet('Users');
+  const data = sheet.getDataRange().getValues();
+  
+  // 중복 사용자 확인
+  for (let i = 1; i < data.length; i++) {
+    const [sName, sTeam] = data[i];
+    if (sName.toString().trim() === cleanName && sTeam.toString().trim() === cleanTeam) {
+      return { success: false, message: '이미 등록된 직원 정보입니다. 로그인해 주세요.' };
+    }
+  }
+  
+  // 신규 가입 처리 (비밀번호는 해시로 저장)
+  sheet.appendRow([cleanName, cleanTeam, hashedPin, 'employee']);
+  return { success: true, role: 'employee', message: '직원 등록(회원가입)이 완료되었습니다.' };
 }
 
 // 2. 알람 시스템 설정 저장 (Config)

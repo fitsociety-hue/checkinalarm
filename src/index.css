@@ -414,3 +414,74 @@ body {
     border: none !important;
   }
 }
+
+/* Individual PIN Boxes & Premium Header Styles */
+.pin-container {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.pin-box {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid #E5E7EB;
+  background-color: #FFFFFF;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-main);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.pin-box:hover {
+  border-color: #CBD5E1;
+}
+
+.pin-box:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(74, 96, 225, 0.15) !important;
+  transform: scale(1.02);
+}
+
+.auth-brand-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 32px;
+  padding: 8px 4px;
+}
+
+.auth-brand-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background-color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(74, 96, 225, 0.25);
+  transition: transform 0.3s ease;
+}
+
+.auth-brand-logo:hover {
+  transform: rotate(-10deg) scale(1.05);
+}
+
+.auth-brand-text h1 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary-color);
+  line-height: 1.15;
+}
+
+.auth-brand-text p {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+

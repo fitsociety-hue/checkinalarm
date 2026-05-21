@@ -1,5 +1,5 @@
 // Google Apps Script Web App URL
-export const GAS_URL = 'https://script.google.com/macros/s/AKfycbwBlgRPeb85ar4pDHlPK-Xz9oJ3TCZJDeukz75CvBhE_fPLI2TY-ib58lvaMjNjCXVd/exec';
+export const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwBUTDTcOeJEk87AB3ep7zRkOMF_0Np_hy74l2DLO3sCxXCZqmo9LALKwUCTirQjk/exec';
 
 /**
  * GAS와 통신하는 함수.
