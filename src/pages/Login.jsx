@@ -164,10 +164,11 @@ export default function Login() {
             </svg>
           </div>
           <div className="auth-brand-text">
-            <h1>ChatAlarm</h1>
+            <h1>식수 인원 체크</h1>
             <p>강동어울림복지관</p>
           </div>
         </div>
+
 
         {/* Dynamic Titles */}
         <h2 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>
