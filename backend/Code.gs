@@ -623,9 +623,29 @@ function handleAdminLogin(params) {
   const sheet = getSheet('Admins');
   const data = sheet.getDataRange().getValues();
   
+  const cleanPassword = adminPassword ? adminPassword.toString().trim() : "";
+  
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === adminId) {
-      if (data[i][1].toString() === adminPassword.toString()) {
+      const storedPassword = data[i][1] ? data[i][1].toString().trim() : "";
+      
+      // 64자리 16진수 문자열(SHA-256)인지 판단
+      const isSha256 = /^[a-fA-F0-9]{64}$/.test(storedPassword);
+      let isValid = false;
+      
+      if (isSha256) {
+        isValid = (storedPassword === hashPin(cleanPassword));
+      } else {
+        isValid = (storedPassword === cleanPassword);
+      }
+      
+      if (isValid) {
+        // 평문 비밀번호로 로그인 성공 시 보안 강화를 위해 해시로 백그라운드 자동 업데이트 (마이그레이션)
+        if (!isSha256) {
+          const hashedPin = hashPin(cleanPassword);
+          sheet.getRange(i + 1, 2).setValue(hashedPin);
+          SpreadsheetApp.flush();
+        }
         return { success: true, role: 'admin' };
       } else {
         return { success: false, message: '관리자 비밀번호가 일치하지 않습니다.' };
@@ -641,10 +661,32 @@ function handleChangeAdminPassword(params) {
   const sheet = getSheet('Admins');
   const data = sheet.getDataRange().getValues();
   
+  const cleanCurrent = currentPassword ? currentPassword.toString().trim() : "";
+  const cleanNew = newPassword ? newPassword.toString().trim() : "";
+  
+  if (!cleanNew) {
+    return { success: false, message: '새로운 비밀번호를 정확히 입력해주세요.' };
+  }
+  
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === adminId) {
-      if (data[i][1].toString() === currentPassword.toString()) {
-        sheet.getRange(i + 1, 2).setValue(newPassword);
+      const storedPassword = data[i][1] ? data[i][1].toString().trim() : "";
+      
+      // 64자리 16진수 문자열(SHA-256)인지 판단
+      const isSha256 = /^[a-fA-F0-9]{64}$/.test(storedPassword);
+      let isValid = false;
+      
+      if (isSha256) {
+        isValid = (storedPassword === hashPin(cleanCurrent));
+      } else {
+        isValid = (storedPassword === cleanCurrent);
+      }
+      
+      if (isValid) {
+        // 비밀번호 변경 시 SHA-256 해시로 암호화하여 저장
+        const hashedNew = hashPin(cleanNew);
+        sheet.getRange(i + 1, 2).setValue(hashedNew);
+        SpreadsheetApp.flush();
         return { success: true, message: '비밀번호가 성공적으로 변경되었습니다.' };
       } else {
         return { success: false, message: '현재 비밀번호가 일치하지 않습니다.' };
